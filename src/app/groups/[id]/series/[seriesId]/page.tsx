@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import {
+  registerForSeriesAction,
+  withdrawSeriesRegistrationAction,
+} from "@/app/actions/series-registration";
 import { createRaceAction } from "@/app/actions/series";
 import { createClient } from "@/lib/supabase/server";
 
@@ -17,13 +21,15 @@ function formatUtc(iso: string) {
 
 type Props = {
   params: Promise<{ id: string; seriesId: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; registered?: string; withdrawn?: string }>;
 };
 
 export default async function SeriesDetailPage({ params, searchParams }: Props) {
   const { id: groupId, seriesId } = await params;
   const q = await searchParams;
   const error = q.error ? decodeURIComponent(q.error) : null;
+  const showRegisteredOk = q.registered === "1";
+  const showWithdrawnOk = q.withdrawn === "1";
 
   const supabase = await createClient();
   const {
@@ -64,6 +70,30 @@ export default async function SeriesDetailPage({ params, searchParams }: Props) 
     .maybeSingle();
 
   const isAdmin = me?.role === "club_admin";
+  const isMember = !!me;
+
+  const { data: registrations, error: registrationsError } = await supabase
+    .from("series_registrations")
+    .select("user_id, created_at")
+    .eq("series_id", seriesId)
+    .order("created_at", { ascending: true });
+
+  const regIds = registrations?.map((r) => r.user_id) ?? [];
+  const regNameByUser = new Map<string, string | null>();
+
+  if (regIds.length > 0) {
+    const { data: regProfiles } = await supabase
+      .from("profiles")
+      .select("id, display_name")
+      .in("id", regIds);
+
+    for (const p of regProfiles ?? []) {
+      regNameByUser.set(p.id, p.display_name);
+    }
+  }
+
+  const isRegistered =
+    registrations?.some((r) => r.user_id === user.id) ?? false;
 
   return (
     <div className="flex flex-1 flex-col bg-zinc-50 px-4 py-12 dark:bg-zinc-950">
@@ -100,6 +130,91 @@ export default async function SeriesDetailPage({ params, searchParams }: Props) 
             {error}
           </p>
         ) : null}
+
+        {showRegisteredOk ? (
+          <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
+            You are registered for this series (all races in it).
+          </p>
+        ) : null}
+
+        {showWithdrawnOk ? (
+          <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
+            Registration withdrawn for this series.
+          </p>
+        ) : null}
+
+        <section className="mt-10">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                Series registration
+              </h2>
+              <p className="mt-1 max-w-xl text-xs text-zinc-500 dark:text-zinc-400">
+                v1 rule: one registration covers{" "}
+                <strong className="font-medium text-zinc-700 dark:text-zinc-300">every race</strong>{" "}
+                in this series.
+              </p>
+            </div>
+            {isMember && !isRegistered ? (
+              <form action={registerForSeriesAction}>
+                <input type="hidden" name="group_id" value={groupId} />
+                <input type="hidden" name="series_id" value={seriesId} />
+                <button
+                  type="submit"
+                  className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+                >
+                  Register for series
+                </button>
+              </form>
+            ) : null}
+            {isMember && isRegistered ? (
+              <form action={withdrawSeriesRegistrationAction}>
+                <input type="hidden" name="group_id" value={groupId} />
+                <input type="hidden" name="series_id" value={seriesId} />
+                <button
+                  type="submit"
+                  className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 dark:border-zinc-600 dark:text-zinc-200"
+                >
+                  Withdraw registration
+                </button>
+              </form>
+            ) : null}
+          </div>
+
+          {registrationsError ? (
+            <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-200">
+              {registrationsError.message}
+            </p>
+          ) : (
+            <ul className="mt-4 divide-y divide-zinc-200 rounded-xl border border-zinc-200 bg-white dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-900">
+              {!registrations?.length ? (
+                <li className="px-4 py-8 text-center text-sm text-zinc-600 dark:text-zinc-400">
+                  No sailors registered yet.
+                </li>
+              ) : (
+                registrations.map((r) => (
+                  <li
+                    key={r.user_id}
+                    className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:justify-between"
+                  >
+                    <span className="font-medium text-zinc-900 dark:text-zinc-50">
+                      {regNameByUser.get(r.user_id) ?? "—"}
+                      {r.user_id === user.id ? (
+                        <span className="ml-2 text-xs font-normal text-zinc-500">(you)</span>
+                      ) : null}
+                    </span>
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                      Registered{" "}
+                      {new Intl.DateTimeFormat(undefined, {
+                        dateStyle: "medium",
+                      }).format(new Date(r.created_at))}
+                    </span>
+                  </li>
+                ))
+              )}
+            </ul>
+          )}
+        </section>
 
         <section className="mt-10">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
