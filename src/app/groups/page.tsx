@@ -2,7 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
-export default async function GroupsPage() {
+type Props = {
+  searchParams: Promise<{ error?: string }>;
+};
+
+export default async function GroupsPage({ searchParams }: Props) {
+  const q = await searchParams;
+  const actionError = q.error ? decodeURIComponent(q.error) : null;
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -46,6 +53,15 @@ export default async function GroupsPage() {
             New group
           </Link>
         </div>
+
+        {actionError ? (
+          <p
+            className="mt-6 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100"
+            role="alert"
+          >
+            {actionError}
+          </p>
+        ) : null}
 
         {error ? (
           <p className="mt-8 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-200">

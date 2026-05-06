@@ -81,6 +81,15 @@ export default async function GroupDetailPage({ params }: Props) {
           ) : null}
         </div>
 
+        <div className="mt-6">
+          <Link
+            href={`/groups/${id}/series`}
+            className="inline-flex rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-900 transition hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-100 dark:hover:bg-zinc-800"
+          >
+            Series &amp; races
+          </Link>
+        </div>
+
         {membersError ? (
           <p className="mt-6 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-200">
             {membersError.message}
