@@ -28,6 +28,12 @@ export default function Home() {
             Log in
           </Link>
           <Link
+            href="/groups"
+            className="rounded-lg border border-zinc-300 px-5 py-2.5 text-sm font-medium text-zinc-900 dark:border-zinc-600 dark:text-zinc-100"
+          >
+            Groups
+          </Link>
+          <Link
             href="/account"
             className="rounded-lg border border-transparent px-5 py-2.5 text-sm font-medium text-blue-600 underline-offset-4 hover:underline dark:text-blue-400"
           >
