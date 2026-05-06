@@ -232,14 +232,16 @@ export default async function SeriesDetailPage({ params, searchParams }: Props) 
                 </li>
               ) : (
                 races.map((r) => (
-                  <li
-                    key={r.id}
-                    className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:justify-between"
-                  >
-                    <span className="font-medium text-zinc-900 dark:text-zinc-50">{r.name}</span>
-                    <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                      {formatUtc(r.scheduled_at)} UTC
-                    </span>
+                  <li key={r.id}>
+                    <Link
+                      href={`/groups/${groupId}/series/${seriesId}/races/${r.id}`}
+                      className="flex flex-col gap-1 px-4 py-3 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50 sm:flex-row sm:justify-between"
+                    >
+                      <span className="font-medium text-zinc-900 dark:text-zinc-50">{r.name}</span>
+                      <span className="text-sm text-zinc-600 dark:text-zinc-400">
+                        {formatUtc(r.scheduled_at)} UTC
+                      </span>
+                    </Link>
                   </li>
                 ))
               )}

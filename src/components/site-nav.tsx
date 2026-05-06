@@ -32,6 +32,12 @@ export async function SiteNav() {
                 Groups
               </Link>
               <Link
+                href="/fleet"
+                className="text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-100"
+              >
+                Fleet
+              </Link>
+              <Link
                 href="/account"
                 className="text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-100"
               >
