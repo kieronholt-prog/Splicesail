@@ -32,19 +32,35 @@ export async function createGroupAction(formData: FormData) {
     );
   }
 
-  const { data, error } = await supabase
-    .from("groups")
-    .insert({
-      name,
-      slug,
-      created_by: user.id,
-    })
-    .select("id")
-    .single();
+  const { error: insertErr } = await supabase.from("groups").insert({
+    name,
+    slug,
+    created_by: user.id,
+  });
 
-  if (error) {
-    redirect("/groups/new?error=" + encodeURIComponent(error.message));
+  if (insertErr) {
+    redirect("/groups/new?error=" + encodeURIComponent(insertErr.message));
   }
 
-  redirect(`/groups/${data.id}`);
+  // Avoid INSERT … RETURNING + SELECT RLS: membership row is added in an AFTER trigger,
+  // but returning the new row requires SELECT before that membership always passes policies.
+  const { data: row, error: readErr } = await supabase
+    .from("groups")
+    .select("id")
+    .eq("created_by", user.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (readErr || !row) {
+    redirect(
+      "/groups/new?error=" +
+        encodeURIComponent(
+          readErr?.message ??
+            "Group was created but could not be loaded — refresh Groups.",
+        ),
+    );
+  }
+
+  redirect(`/groups/${row.id}`);
 }
