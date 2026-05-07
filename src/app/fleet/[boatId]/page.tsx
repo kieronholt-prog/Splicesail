@@ -20,7 +20,9 @@ export default async function EditBoatPage({ params }: Props) {
 
   const { data: boat, error } = await supabase
     .from("boats")
-    .select("id, label, class_name, default_sail_number, handedness, crew_template")
+    .select(
+      "id, label, class_name, default_sail_number, handedness, crew_template, py_rating",
+    )
     .eq("id", boatId)
     .eq("owner_user_id", user.id)
     .maybeSingle();
@@ -70,6 +72,20 @@ export default async function EditBoatPage({ params }: Props) {
             <input
               name="default_sail_number"
               defaultValue={boat.default_sail_number ?? ""}
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 outline-none ring-blue-500 focus:ring-2 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            Portsmouth number <span className="font-normal text-zinc-500">(PY, optional)</span>
+            <input
+              name="py_rating"
+              type="number"
+              min={400}
+              max={2500}
+              step={1}
+              placeholder="e.g. 1103"
+              defaultValue={boat.py_rating ?? ""}
               className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 outline-none ring-blue-500 focus:ring-2 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
             />
           </label>

@@ -122,6 +122,23 @@ export default async function SeriesDetailPage({ params, searchParams }: Props) 
           </p>
         ) : null}
 
+        <nav className="mt-6 flex flex-wrap gap-4 text-sm">
+          <Link
+            href={`/groups/${groupId}/series/${seriesId}/standings`}
+            className="font-medium text-blue-600 underline dark:text-blue-400"
+          >
+            Series standings
+          </Link>
+          {isAdmin ? (
+            <Link
+              href={`/groups/${groupId}/series/${seriesId}/scoring`}
+              className="font-medium text-blue-600 underline dark:text-blue-400"
+            >
+              Scoring settings (admin)
+            </Link>
+          ) : null}
+        </nav>
+
         {error ? (
           <p
             className="mt-6 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-200"

@@ -204,7 +204,7 @@ export async function setRaceOutcomeAction(formData: FormData) {
     redirect("/groups?error=" + encodeURIComponent("Missing race context."));
   }
 
-  const allowed = ["finished", "retired", "dnf", "dns", ""];
+  const allowed = ["finished", "retired", "dnf", "dns", "dsq", "ocs", ""];
   if (!allowed.includes(outcome)) {
     redirect(
       raceUrl(groupId, seriesId, raceId, `error=${encodeURIComponent("Invalid outcome.")}`),
@@ -237,4 +237,60 @@ export async function setRaceOutcomeAction(formData: FormData) {
   }
 
   redirect(raceUrl(groupId, seriesId, raceId, "outcome=1"));
+}
+
+export async function updateRaceEntryPyOverrideAction(formData: FormData) {
+  const groupId = String(formData.get("group_id") ?? "").trim();
+  const seriesId = String(formData.get("series_id") ?? "").trim();
+  const raceId = String(formData.get("race_id") ?? "").trim();
+  const pyRaw = String(formData.get("py_override") ?? "").trim();
+
+  if (!groupId || !seriesId || !raceId) {
+    redirect("/groups?error=" + encodeURIComponent("Missing race context."));
+  }
+
+  let py_override: number | null = null;
+  if (pyRaw.length) {
+    const n = Math.trunc(Number(pyRaw));
+    if (!Number.isFinite(n) || n < 400 || n > 2500) {
+      redirect(
+        raceUrl(
+          groupId,
+          seriesId,
+          raceId,
+          `error=${encodeURIComponent("PY override must be between 400 and 2500, or blank.")}`,
+        ),
+      );
+    }
+    py_override = n;
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  if (!(await assertRaceInGroup(supabase, raceId, seriesId, groupId))) {
+    redirect(
+      raceUrl(groupId, seriesId, raceId, `error=${encodeURIComponent("Race not in this series.")}`),
+    );
+  }
+
+  await requireOwnRaceEntry(supabase, raceId, user.id, groupId, seriesId);
+
+  const { error } = await supabase
+    .from("race_entries")
+    .update({ py_override })
+    .eq("race_id", raceId)
+    .eq("user_id", user.id);
+
+  if (error) {
+    redirect(
+      raceUrl(groupId, seriesId, raceId, `error=${encodeURIComponent(error.message)}`),
+    );
+  }
+
+  redirect(raceUrl(groupId, seriesId, raceId, "py_saved=1"));
 }

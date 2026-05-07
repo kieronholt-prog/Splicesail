@@ -53,6 +53,19 @@ export default async function NewBoatPage() {
           </label>
 
           <label className="flex flex-col gap-1 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            Portsmouth number <span className="font-normal text-zinc-500">(PY, optional)</span>
+            <input
+              name="py_rating"
+              type="number"
+              min={400}
+              max={2500}
+              step={1}
+              placeholder="e.g. 1103"
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 outline-none ring-blue-500 focus:ring-2 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm font-medium text-zinc-700 dark:text-zinc-300">
             Handedness
             <select
               name="handedness"

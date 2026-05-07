@@ -8,6 +8,16 @@ function fleetRedirect(error: string) {
   redirect("/fleet?error=" + encodeURIComponent(error));
 }
 
+function optionalPyRating(formData: FormData, field: string): number | null {
+  const raw = String(formData.get(field) ?? "").trim();
+  if (!raw.length) return null;
+  const n = Math.trunc(Number(raw));
+  if (!Number.isFinite(n) || n < 400 || n > 2500) {
+    fleetRedirect("Portsmouth number must be between 400 and 2500, or blank.");
+  }
+  return n;
+}
+
 export async function createBoatAction(formData: FormData) {
   const supabase = await createClient();
   const {
@@ -20,6 +30,7 @@ export async function createBoatAction(formData: FormData) {
   const class_name = optionalTrim(formData, "class_name");
   const default_sail_number = optionalTrim(formData, "default_sail_number");
   const handedness = String(formData.get("handedness") ?? "").trim();
+  const py_rating = optionalPyRating(formData, "py_rating");
 
   if (!label) fleetRedirect("Boat label is required.");
 
@@ -37,6 +48,7 @@ export async function createBoatAction(formData: FormData) {
     default_sail_number,
     handedness,
     crew_template,
+    py_rating,
   });
 
   if (error) fleetRedirect(error.message);
@@ -59,6 +71,7 @@ export async function updateBoatAction(formData: FormData) {
   const class_name = optionalTrim(formData, "class_name");
   const default_sail_number = optionalTrim(formData, "default_sail_number");
   const handedness = String(formData.get("handedness") ?? "").trim();
+  const py_rating = optionalPyRating(formData, "py_rating");
 
   if (!label) fleetRedirect("Boat label is required.");
   if (!["single", "double", "triple_plus"].includes(handedness)) {
@@ -76,6 +89,7 @@ export async function updateBoatAction(formData: FormData) {
       default_sail_number,
       handedness,
       crew_template,
+      py_rating,
     })
     .eq("id", boatId)
     .eq("owner_user_id", user.id);
