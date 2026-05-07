@@ -143,3 +143,75 @@ export async function upsertRoFinishAction(formData: FormData) {
 
   redirect(raceUrl(groupId, seriesId, raceId, "ro_finish=1"));
 }
+
+export async function updateOfficialFinishAction(formData: FormData) {
+  const groupId = String(formData.get("group_id") ?? "").trim();
+  const seriesId = String(formData.get("series_id") ?? "").trim();
+  const raceId = String(formData.get("race_id") ?? "").trim();
+  const raceEntryId = String(formData.get("race_entry_id") ?? "").trim();
+  const rawOfficial = String(formData.get("official_finish_at") ?? "").trim();
+
+  const officialIso = datetimeLocalToUtcIso(rawOfficial);
+
+  if (!groupId || !seriesId || !raceId || !raceEntryId || !officialIso) {
+    redirect(
+      raceUrl(
+        groupId,
+        seriesId,
+        raceId,
+        `error=${encodeURIComponent("Official finish time (UTC) is required.")}`,
+      ),
+    );
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  await requireRaceStaff(supabase, groupId, user.id);
+
+  const { data: entry, error: fetchErr } = await supabase
+    .from("race_entries")
+    .select("id, race_id")
+    .eq("id", raceEntryId)
+    .maybeSingle();
+
+  if (fetchErr || !entry || entry.race_id !== raceId) {
+    redirect(
+      raceUrl(groupId, seriesId, raceId, `error=${encodeURIComponent("Entry not found for this race.")}`),
+    );
+  }
+
+  const { data: finishRow, error: finishFetchErr } = await supabase
+    .from("race_finishes")
+    .select("id")
+    .eq("race_entry_id", raceEntryId)
+    .maybeSingle();
+
+  if (finishFetchErr || !finishRow) {
+    redirect(
+      raceUrl(
+        groupId,
+        seriesId,
+        raceId,
+        `error=${encodeURIComponent("Record an RO finish before adjusting official time.")}`,
+      ),
+    );
+  }
+
+  const { error } = await supabase
+    .from("race_finishes")
+    .update({ official_finish_at: officialIso })
+    .eq("race_entry_id", raceEntryId);
+
+  if (error) {
+    redirect(
+      raceUrl(groupId, seriesId, raceId, `error=${encodeURIComponent(error.message)}`),
+    );
+  }
+
+  redirect(raceUrl(groupId, seriesId, raceId, "official_saved=1"));
+}

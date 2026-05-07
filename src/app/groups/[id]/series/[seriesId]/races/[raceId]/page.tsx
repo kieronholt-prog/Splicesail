@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
   markRaceEntryStartedAction,
+  updateOfficialFinishAction,
   upsertRoFinishAction,
 } from "@/app/actions/ro-finishes";
 import {
@@ -11,7 +12,9 @@ import {
   tallyAshoreAction,
   updateRaceEntryBoatAction,
 } from "@/app/actions/race-entries";
+import { computeProvisionalResults } from "@/lib/race-results";
 import { createClient } from "@/lib/supabase/server";
+import { utcIsoToDatetimeLocalValue } from "@/lib/utc-datetime-local";
 
 function formatUtc(iso: string) {
   try {
@@ -49,6 +52,7 @@ type Props = {
     outcome?: string;
     mark_started?: string;
     ro_finish?: string;
+    official_saved?: string;
   }>;
 };
 
@@ -152,6 +156,11 @@ export default async function RaceDetailPage({ params, searchParams }: Props) {
     }
   }
 
+  const provisional = computeProvisionalResults(
+    allEntries ?? [],
+    finishByEntryId,
+  );
+
   const entryUserIds = [...new Set((allEntries ?? []).map((e) => e.user_id))];
   const entryBoatIds = [
     ...new Set(
@@ -240,6 +249,11 @@ export default async function RaceDetailPage({ params, searchParams }: Props) {
         {q.ro_finish === "1" ? (
           <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
             RO finish recorded (official time matches RO for now).
+          </p>
+        ) : null}
+        {q.official_saved === "1" ? (
+          <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
+            Official finish time updated (RO time unchanged).
           </p>
         ) : null}
 
@@ -470,6 +484,106 @@ export default async function RaceDetailPage({ params, searchParams }: Props) {
         ) : null}
 
         {isMember && allEntries && allEntries.length > 0 ? (
+          <>
+            <section className="mt-12">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                Provisional results
+              </h2>
+              <p className="mt-2 max-w-2xl text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+                Sorted by <strong className="text-zinc-700 dark:text-zinc-300">official</strong> finish
+                time (UTC). Identical times share a place (competition ranking). For guidance only —
+                not a substitute for the notice of race or any protest process.
+              </p>
+              {provisional.ranked.length === 0 ? (
+                <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
+                  No ranked finishers yet. Sailors need outcome{" "}
+                  <strong className="text-zinc-800 dark:text-zinc-200">Finished</strong>, an RO{" "}
+                  <strong className="text-zinc-800 dark:text-zinc-200">started</strong> flag, and an
+                  official finish time.
+                </p>
+              ) : (
+                <div className="mt-4 overflow-x-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+                  <table className="w-full min-w-[520px] text-left text-sm">
+                    <thead className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950">
+                      <tr>
+                        <th className="px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">
+                          Place
+                        </th>
+                        <th className="px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">
+                          Sailor
+                        </th>
+                        <th className="px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Boat</th>
+                        <th className="px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Sail</th>
+                        <th className="px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">
+                          Official (UTC)
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                      {provisional.ranked.map((row) => (
+                        <tr key={row.entry.id}>
+                          <td className="px-3 py-2 font-medium tabular-nums text-zinc-900 dark:text-zinc-100">
+                            {row.rank}
+                          </td>
+                          <td className="px-3 py-2 text-zinc-900 dark:text-zinc-100">
+                            {nameByUser.get(row.entry.user_id) ?? "—"}
+                          </td>
+                          <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">
+                            {row.entry.boat_id
+                              ? labelByBoat.get(row.entry.boat_id) ?? "—"
+                              : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">
+                            {row.entry.sail_number_override ?? "—"}
+                          </td>
+                          <td className="px-3 py-2 text-xs text-zinc-600 dark:text-zinc-400">
+                            {formatTs(row.officialFinishAt)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {provisional.notes.length > 0 ? (
+                <div className="mt-8">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                    Other entries
+                  </h3>
+                  <div className="mt-3 overflow-x-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+                    <table className="w-full min-w-[480px] text-left text-sm">
+                      <thead className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950">
+                        <tr>
+                          <th className="px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">
+                            Sailor
+                          </th>
+                          <th className="px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Boat</th>
+                          <th className="px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Sail</th>
+                          <th className="px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Note</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                        {provisional.notes.map(({ entry: e, note }) => (
+                          <tr key={e.id}>
+                            <td className="px-3 py-2 text-zinc-900 dark:text-zinc-100">
+                              {nameByUser.get(e.user_id) ?? "—"}
+                            </td>
+                            <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">
+                              {e.boat_id ? labelByBoat.get(e.boat_id) ?? "—" : "—"}
+                            </td>
+                            <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">
+                              {e.sail_number_override ?? "—"}
+                            </td>
+                            <td className="px-3 py-2 text-zinc-600 dark:text-zinc-400">{note}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
+            </section>
+
           <section className="mt-12">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
               Entries ({group?.name})
@@ -573,6 +687,35 @@ export default async function RaceDetailPage({ params, searchParams }: Props) {
                                 Save finish
                               </button>
                             </form>
+                            {finish ? (
+                              <form
+                                action={updateOfficialFinishAction}
+                                className="flex flex-col gap-1 border-t border-zinc-200 pt-2 dark:border-zinc-700"
+                              >
+                                <input type="hidden" name="group_id" value={groupId} />
+                                <input type="hidden" name="series_id" value={seriesId} />
+                                <input type="hidden" name="race_id" value={raceId} />
+                                <input type="hidden" name="race_entry_id" value={row.id} />
+                                <label className="text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                                  Official UTC
+                                  <input
+                                    type="datetime-local"
+                                    name="official_finish_at"
+                                    step={60}
+                                    defaultValue={utcIsoToDatetimeLocalValue(
+                                      finish.official_finish_at ?? finish.ro_finish_at ?? "",
+                                    )}
+                                    className="mt-0.5 w-full rounded border border-zinc-300 bg-white px-1 py-1 text-xs text-zinc-900 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
+                                  />
+                                </label>
+                                <button
+                                  type="submit"
+                                  className="rounded border border-amber-600/50 px-2 py-1 text-xs font-medium text-amber-950 dark:border-amber-500/40 dark:text-amber-100"
+                                >
+                                  Save official only
+                                </button>
+                              </form>
+                            ) : null}
                           </td>
                         ) : null}
                       </tr>
@@ -582,6 +725,7 @@ export default async function RaceDetailPage({ params, searchParams }: Props) {
               </table>
             </div>
           </section>
+          </>
         ) : null}
       </main>
     </div>
