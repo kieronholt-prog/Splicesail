@@ -1,0 +1,407 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { getServerAuth } from "@/lib/supabase/auth-cache";
+import { loadRaceMatchCandidates } from "@/lib/track-race-matching";
+import { fetchStravaTrackPoints, getStravaConnection } from "@/lib/strava";
+import {
+  executeAnalysis,
+  parseFIT,
+  parseGPX,
+  serializeAnalysisForDb,
+  DETECTION_DEFAULTS,
+} from "@/lib/sailing-analysis";
+import type { AnalysisMode, MarkOverride } from "@/lib/sailing-analysis/types";
+
+function redirectTracks(submissionId: string, query?: string) {
+  redirect(`/tracks/${submissionId}${query ? `?${query}` : ""}`);
+}
+
+async function loadSubmissionOwned(submissionId: string) {
+  const { supabase, user } = await getServerAuth();
+  if (!user) redirect("/login");
+
+  const { data: sub } = await supabase
+    .from("race_track_submissions")
+    .select("*")
+    .eq("id", submissionId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!sub) redirect("/tracks?error=" + encodeURIComponent("Track submission not found."));
+  return { supabase, user, sub };
+}
+
+async function loadTrackPointsForSubmission(
+  supabase: Awaited<ReturnType<typeof getServerAuth>>["supabase"],
+  userId: string,
+  sub: {
+    track_source: string;
+    external_activity_id: string;
+    storage_path: string | null;
+  },
+) {
+  if (sub.track_source === "strava") {
+    const conn = await getStravaConnection(supabase, userId);
+    if (!conn) throw new Error("Strava not linked.");
+    return fetchStravaTrackPoints(conn, sub.external_activity_id);
+  }
+
+  if (!sub.storage_path) throw new Error("Upload file missing.");
+
+  const { data, error } = await supabase.storage.from("race-tracks").download(sub.storage_path);
+  if (error || !data) throw new Error("Could not load uploaded track.");
+
+  const name = sub.storage_path.toLowerCase();
+  if (name.endsWith(".gpx") || name.endsWith(".xml")) {
+    return parseGPX(await data.text());
+  }
+  const buf = await data.arrayBuffer();
+  return parseFIT(buf);
+}
+
+async function loadClubSailingContext(
+  supabase: Awaited<ReturnType<typeof getServerAuth>>["supabase"],
+  groupId: string,
+  courseLetter: string | null,
+) {
+  const { data: marks } = await supabase
+    .from("group_sailing_marks")
+    .select("*")
+    .eq("group_id", groupId)
+    .order("sort_order");
+
+  let course = null;
+  if (courseLetter) {
+    const { data } = await supabase
+      .from("group_sailing_courses")
+      .select("*")
+      .eq("group_id", groupId)
+      .eq("course_letter", courseLetter)
+      .maybeSingle();
+    course = data;
+  }
+
+  return { marks: marks ?? [], course };
+}
+
+export async function createStravaSubmissionAction(formData: FormData) {
+  const { supabase, user } = await getServerAuth();
+  if (!user) redirect("/login");
+
+  const activityId = String(formData.get("activity_id") ?? "").trim();
+  const activityName = String(formData.get("activity_name") ?? "").trim();
+  const startDate = String(formData.get("start_date") ?? "").trim();
+  const elapsed = Number(formData.get("elapsed_time") ?? 0);
+
+  if (!activityId || !startDate) {
+    redirect("/tracks/new?error=" + encodeURIComponent("Invalid Strava activity."));
+  }
+
+  const startMs = new Date(startDate).getTime();
+  const endMs = startMs + elapsed * 1000;
+
+  const candidates = await loadRaceMatchCandidates(supabase, user.id, startMs, endMs);
+  const best = candidates[0];
+
+  if (!best?.groupId) {
+    redirect("/tracks/new?error=" + encodeURIComponent("No matching race found for this activity time."));
+  }
+
+  const { data: sub, error } = await supabase
+    .from("race_track_submissions")
+    .upsert(
+      {
+        user_id: user.id,
+        group_id: best.groupId,
+        proposed_race_id: best.raceId,
+        track_source: "strava",
+        external_activity_id: activityId,
+        activity_name: activityName || null,
+        activity_started_at: new Date(startMs).toISOString(),
+        activity_ended_at: new Date(endMs).toISOString(),
+        status: "pending_confirm",
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,external_activity_id" },
+    )
+    .select("id")
+    .single();
+
+  if (error || !sub) {
+    redirect("/tracks/new?error=" + encodeURIComponent(error?.message ?? "Could not save submission."));
+  }
+
+  revalidatePath("/tracks");
+  redirectTracks(sub.id, "step=confirm");
+}
+
+export async function createUploadSubmissionAction(formData: FormData) {
+  const { supabase, user } = await getServerAuth();
+  if (!user) redirect("/login");
+
+  const file = formData.get("track_file");
+  if (!(file instanceof File) || file.size === 0) {
+    redirect("/tracks/new?error=" + encodeURIComponent("Choose a GPX or FIT file."));
+  }
+
+  const lower = file.name.toLowerCase();
+  let points: { lat: number; lon: number; time: number | null }[] = [];
+  if (lower.endsWith(".gpx") || lower.endsWith(".xml")) {
+    points = parseGPX(await file.text());
+  } else if (lower.endsWith(".fit")) {
+    points = parseFIT(await file.arrayBuffer());
+  } else {
+    redirect("/tracks/new?error=" + encodeURIComponent("Use GPX or FIT format."));
+  }
+
+  const timed = points.filter((p) => p.time != null) as { lat: number; lon: number; time: number }[];
+  if (timed.length < 20) {
+    redirect("/tracks/new?error=" + encodeURIComponent("Track needs at least 20 timed GPS points."));
+  }
+
+  const startMs = timed[0].time * 1000;
+  const endMs = timed[timed.length - 1].time * 1000;
+  const candidates = await loadRaceMatchCandidates(supabase, user.id, startMs, endMs);
+  const best = candidates[0];
+  if (!best?.groupId) {
+    redirect("/tracks/new?error=" + encodeURIComponent("No matching race found for this track time."));
+  }
+
+  const activityId = `file-${Date.now()}`;
+  const storagePath = `${user.id}/${activityId}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+
+  const { error: upErr } = await supabase.storage.from("race-tracks").upload(storagePath, file, {
+    upsert: true,
+    contentType: file.type || "application/octet-stream",
+  });
+  if (upErr) {
+    redirect("/tracks/new?error=" + encodeURIComponent(upErr.message));
+  }
+
+  await supabase.storage.from("race-tracks").upload(
+    `${user.id}/${activityId}.json`,
+    JSON.stringify(timed),
+    { upsert: true, contentType: "application/json" },
+  );
+
+  const { data: sub, error } = await supabase
+    .from("race_track_submissions")
+    .insert({
+      user_id: user.id,
+      group_id: best.groupId,
+      proposed_race_id: best.raceId,
+      track_source: "upload",
+      external_activity_id: activityId,
+      activity_name: file.name,
+      activity_started_at: new Date(startMs).toISOString(),
+      activity_ended_at: new Date(endMs).toISOString(),
+      storage_path: storagePath,
+      status: "pending_confirm",
+    })
+    .select("id")
+    .single();
+
+  if (error || !sub) {
+    redirect("/tracks/new?error=" + encodeURIComponent(error?.message ?? "Could not save submission."));
+  }
+
+  revalidatePath("/tracks");
+  redirectTracks(sub.id, "step=confirm");
+}
+
+export async function confirmRaceBoatAction(formData: FormData) {
+  const submissionId = String(formData.get("submission_id") ?? "").trim();
+  const raceId = String(formData.get("race_id") ?? "").trim();
+  const boatId = String(formData.get("boat_id") ?? "").trim();
+  const { supabase, sub } = await loadSubmissionOwned(submissionId);
+
+  if (!raceId || !boatId) {
+    redirectTracks(submissionId, "error=" + encodeURIComponent("Select a race and boat."));
+  }
+
+  const { data: race } = await supabase
+    .from("races")
+    .select("id, series_id, series:series_id(group_id)")
+    .eq("id", raceId)
+    .maybeSingle();
+
+  const series = Array.isArray(race?.series) ? race?.series[0] : race?.series;
+  const groupId = series?.group_id ?? sub.group_id;
+
+  const { data: entry } = await supabase
+    .from("race_entries")
+    .select("id")
+    .eq("race_id", raceId)
+    .eq("user_id", sub.user_id)
+    .eq("boat_id", boatId)
+    .maybeSingle();
+
+  await supabase
+    .from("race_track_submissions")
+    .update({
+      race_id: raceId,
+      boat_id: boatId,
+      group_id: groupId,
+      race_entry_id: entry?.id ?? null,
+      status: "pending_mode",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", submissionId);
+
+  revalidatePath("/tracks");
+  redirectTracks(submissionId, "step=mode");
+}
+
+export async function setAnalysisModeAction(formData: FormData) {
+  const submissionId = String(formData.get("submission_id") ?? "").trim();
+  const mode = String(formData.get("analysis_mode") ?? "") as AnalysisMode;
+  const { supabase, user, sub } = await loadSubmissionOwned(submissionId);
+
+  if (mode !== "standalone" && mode !== "collated") {
+    redirectTracks(submissionId, "error=" + encodeURIComponent("Choose an analysis mode."));
+  }
+
+  if (mode === "collated") {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("share_track_for_enhanced_analytics")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profile?.share_track_for_enhanced_analytics === false) {
+      redirectTracks(
+        submissionId,
+        "error=" +
+          encodeURIComponent("Enable track sharing on your account page for collated fleet analysis."),
+      );
+    }
+
+    const { count } = await supabase
+      .from("group_sailing_courses")
+      .select("*", { count: "exact", head: true })
+      .eq("group_id", sub.group_id)
+      .neq("course_type", "custom");
+
+    if ((count ?? 0) === 0) {
+      redirectTracks(
+        submissionId,
+        "error=" + encodeURIComponent("Your club has no courses configured yet — ask a club admin."),
+      );
+    }
+
+    await supabase.from("race_analysis_settings").upsert(
+      {
+        race_id: sub.race_id,
+        group_id: sub.group_id,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "race_id" },
+    );
+  }
+
+  const nextStatus = mode === "standalone" ? "pending_setup" : "pending_ro";
+
+  await supabase
+    .from("race_track_submissions")
+    .update({
+      analysis_mode: mode,
+      status: nextStatus,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", submissionId);
+
+  revalidatePath("/tracks");
+  revalidatePath("/");
+
+  if (mode === "standalone") {
+    redirectTracks(submissionId, "step=setup");
+  }
+  redirectTracks(submissionId, "step=pending_ro");
+}
+
+export async function saveStandaloneSetupAction(formData: FormData) {
+  const submissionId = String(formData.get("submission_id") ?? "").trim();
+  const courseLetter = String(formData.get("course_letter") ?? "").trim() || null;
+  const laps = Math.max(1, Number(formData.get("laps") ?? 1));
+  const markOverridesRaw = String(formData.get("mark_overrides") ?? "{}");
+  const courseSetupRaw = String(formData.get("course_setup") ?? "{}");
+  const detSettingsRaw = String(formData.get("det_settings") ?? "{}");
+
+  let mark_overrides: Record<string, MarkOverride> = {};
+  let course_setup: Record<string, unknown> = {};
+  let det_settings = DETECTION_DEFAULTS;
+  try {
+    mark_overrides = JSON.parse(markOverridesRaw);
+    course_setup = JSON.parse(courseSetupRaw);
+    const parsedDet = JSON.parse(detSettingsRaw);
+    if (parsedDet?.tack && parsedDet?.gybe) det_settings = parsedDet;
+  } catch {
+    redirectTracks(submissionId, "error=" + encodeURIComponent("Invalid setup data."));
+  }
+
+  const { supabase, user, sub } = await loadSubmissionOwned(submissionId);
+
+  await supabase
+    .from("race_track_submissions")
+    .update({
+      course_letter: courseLetter,
+      laps,
+      mark_overrides,
+      course_setup,
+      det_settings,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", submissionId);
+
+  const points = await loadTrackPointsForSubmission(supabase, user.id, sub);
+  const { marks, course } = await loadClubSailingContext(supabase, sub.group_id, courseLetter);
+  const results = executeAnalysis({
+    points,
+    marks,
+    course,
+    laps,
+    markOverrides: mark_overrides,
+    courseSetup: course_setup,
+    detSettings: det_settings,
+  });
+
+  if (!results) {
+    redirectTracks(submissionId, "error=" + encodeURIComponent("Analysis failed — check course and crop settings."));
+  }
+
+  const serialized = serializeAnalysisForDb(results as NonNullable<typeof results>);
+
+  await supabase.from("race_track_analyses").upsert(
+    { submission_id: submissionId, ...serialized, updated_at: new Date().toISOString() },
+    { onConflict: "submission_id" },
+  );
+
+  await supabase
+    .from("race_track_submissions")
+    .update({ status: "ready", updated_at: new Date().toISOString() })
+    .eq("id", submissionId);
+
+  revalidatePath("/tracks");
+  revalidatePath("/");
+  redirect(`/tracks/${submissionId}/analysis`);
+}
+
+export async function dismissTrackNotificationAction(formData: FormData) {
+  const submissionId = String(formData.get("submission_id") ?? "").trim();
+  const { supabase } = await loadSubmissionOwned(submissionId);
+  await supabase
+    .from("race_track_submissions")
+    .update({ ready_notified_at: new Date().toISOString() })
+    .eq("id", submissionId);
+  revalidatePath("/");
+  revalidatePath("/tracks");
+}
+
+export async function loadSubmissionMatchCandidatesAction(submissionId: string) {
+  const { supabase, user, sub } = await loadSubmissionOwned(submissionId);
+  const startMs = new Date(sub.activity_started_at).getTime();
+  const endMs = new Date(sub.activity_ended_at).getTime();
+  return loadRaceMatchCandidates(supabase, user.id, startMs, endMs);
+}

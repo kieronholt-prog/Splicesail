@@ -1,0 +1,100 @@
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import {
+  AnalysisLegsTable,
+  AnalysisResultsSummary,
+} from "@/components/sailing-analysis/analysis-results-summary";
+import { getServerAuth } from "@/lib/supabase/auth-cache";
+import { dismissTrackNotificationAction } from "@/app/actions/track-submissions";
+
+type Props = { params: Promise<{ submissionId: string }> };
+
+export default async function TrackAnalysisPage({ params }: Props) {
+  const { submissionId } = await params;
+  const { supabase, user } = await getServerAuth();
+  if (!user) redirect("/login");
+
+  const { data: sub } = await supabase
+    .from("race_track_submissions")
+    .select("id, activity_name, status, analysis_mode, race_id, group_id")
+    .eq("id", submissionId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!sub || sub.status !== "ready") notFound();
+
+  const { data: analysis } = await supabase
+    .from("race_track_analyses")
+    .select("stats, leg_summary, wind_direction, analysis_snapshot")
+    .eq("submission_id", submissionId)
+    .maybeSingle();
+
+  if (!analysis) notFound();
+
+  const stats = (analysis.stats ?? {}) as Record<string, unknown>;
+  const snapshot = analysis.analysis_snapshot as { legs?: Record<string, unknown>[] } | null;
+  const legs = (snapshot?.legs ?? analysis.leg_summary ?? []) as Record<string, unknown>[];
+
+  let collatedPeers: { id: string; activity_name: string | null }[] = [];
+  if (sub.analysis_mode === "collated" && sub.race_id) {
+    const { data: peers } = await supabase
+      .from("race_track_submissions")
+      .select("id, activity_name, user_id")
+      .eq("race_id", sub.race_id)
+      .eq("analysis_mode", "collated")
+      .eq("status", "ready")
+      .neq("user_id", user.id);
+
+    collatedPeers = (peers ?? []).map((p) => ({ id: p.id, activity_name: p.activity_name }));
+  }
+
+  return (
+    <div className="flex flex-1 flex-col bg-splice-surface px-4 py-12 dark:bg-splice-navy">
+      <main className="mx-auto w-full max-w-3xl rounded-xl border border-splice-sky bg-white p-8 shadow-sm dark:border-splice-navy-light dark:bg-splice-navy">
+        <Link href="/tracks" className="text-sm text-splice-blue underline dark:text-splice-sky">
+          ← Tracks
+        </Link>
+        <h1 className="mt-4 text-xl font-semibold text-splice-navy dark:text-splice-foam">
+          {sub.activity_name ?? "Analysis"}
+        </h1>
+        {sub.analysis_mode === "collated" ? (
+          <p className="mt-1 text-sm text-splice-ocean dark:text-splice-water">
+            Collated fleet analysis — {collatedPeers.length + 1} boat
+            {collatedPeers.length === 0 ? "" : "s"} on this race
+          </p>
+        ) : (
+          <p className="mt-1 text-sm text-splice-ocean dark:text-splice-water">Standalone analysis</p>
+        )}
+
+        <div className="mt-8">
+          <AnalysisResultsSummary stats={stats} windDirection={analysis.wind_direction} />
+        </div>
+
+        <section className="mt-10">
+          <h2 className="text-lg font-medium">Legs</h2>
+          <div className="mt-4">
+            <AnalysisLegsTable legs={legs} />
+          </div>
+        </section>
+
+        {collatedPeers.length > 0 ? (
+          <section className="mt-10">
+            <h2 className="text-lg font-medium">Other fleet tracks</h2>
+            <ul className="mt-3 list-disc pl-5 text-sm text-splice-ocean dark:text-splice-water">
+              {collatedPeers.map((p) => (
+                <li key={p.id}>{p.activity_name ?? "Sailor track"}</li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        <form action={dismissTrackNotificationAction} className="mt-8">
+          <input type="hidden" name="submission_id" value={submissionId} />
+          <button type="submit" className="text-sm text-splice-blue underline dark:text-splice-sky">
+            Dismiss home notification
+          </button>
+        </form>
+      </main>
+    </div>
+  );
+}
