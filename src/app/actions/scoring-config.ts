@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { getServerAuth } from "@/lib/supabase/auth-cache";
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -31,7 +31,7 @@ async function requireClubAdmin(
 
 type Basis = "series_entrants" | "race_starters" | "race_finishers" | "fixed";
 
-const PENALTY_OUTCOMES = ["dns", "dnf", "retired", "dsq", "ocs"] as const;
+const PENALTY_OUTCOMES = ["dns", "dnf", "dnc", "retired", "dsq", "ocs"] as const;
 
 function parseBasis(raw: string): Basis | null {
   if (
@@ -60,10 +60,7 @@ export async function saveSeriesScoringSettingsAction(formData: FormData) {
     );
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user } = await getServerAuth();
 
   if (!user) redirect("/login");
 

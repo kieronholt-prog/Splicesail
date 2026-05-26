@@ -4,26 +4,47 @@ import { correctedSecondsFromElapsed } from "./portsmouth";
 
 export type HandicapSystem = "none" | "portsmouth";
 
+export type RaceScoringMode = "handicap" | "positional";
+
 export interface RaceEntryScoringInput {
   entryId: string;
   userId: string;
+  /** Race fleet for this entry; places and race_starters/finishers penalties are per fleet. */
+  fleetId?: string | null;
   outcome: string | null;
+  /** RO saw boat in start area (not the fleet start signal instant). */
   startedMarkedAt: string | null;
+  /** Fleet start signal UTC ms; falls back to race-level startSignalMs when omitted. */
+  startSignalMs?: number | null;
   boatPy: number | null;
   pyOverride: number | null;
   officialFinishAt: string | null;
+  /** Explicit place for level_rated / pursuit races. */
+  finishPosition?: number | null;
+  /** From race_finishes / race_guest_finishes when loaded for results. */
+  storedElapsedSeconds?: number | null;
+  storedCorrectedSeconds?: number | null;
 }
 
 export interface RaceScoreRow {
   entryId: string;
   userId: string;
+  fleetId: string | null;
   points: number;
   placeLabel: string | null;
   correctedSeconds: number | null;
   elapsedSeconds: number | null;
   effectivePy: number | null;
+  /** Penalty outcome used for points (e.g. dnc when entered but not started). */
+  penaltyOutcome: string | null;
   note: string | null;
 }
+
+export type RaceFleetScoreSection = {
+  fleetId: string | null;
+  fleetName: string;
+  scores: RaceScoreRow[];
+};
 
 function averagePlacePoints(placeStart: number, placeEndInclusive: number): number {
   const n = placeEndInclusive - placeStart + 1;
@@ -37,25 +58,41 @@ function nearlyEqual(a: number, b: number): boolean {
 }
 
 function penaltyOutcomeCodes(): Set<string> {
-  return new Set(["dns", "dnf", "retired", "dsq", "ocs"]);
+  return new Set(["dns", "dnf", "dnc", "retired", "dsq", "ocs"]);
 }
 
-export function computeAppendixARaceScores(options: {
+function fleetPartitionKey(fleetId: string | null | undefined): string {
+  return fleetId ?? "";
+}
+
+function sortRaceScoreRows(rows: RaceScoreRow[]): RaceScoreRow[] {
+  return [...rows].sort((a, b) => {
+    const pa = a.placeLabel != null ? 0 : 1;
+    const pb = b.placeLabel != null ? 0 : 1;
+    if (pa !== pb) return pa - pb;
+    if (a.points !== b.points) return a.points - b.points;
+    return a.entryId.localeCompare(b.entryId);
+  });
+}
+
+function scoreAppendixAEntriesInFleetGroup(options: {
+  scoringMode: RaceScoringMode;
   handicapSystem: HandicapSystem;
   startSignalMs: number | null;
   seriesEntrantCount: number;
   entries: RaceEntryScoringInput[];
   penaltyRulesByOutcome: Map<string, PenaltyRuleInput>;
 }): RaceScoreRow[] {
-  const { handicapSystem, startSignalMs, seriesEntrantCount, entries } = options;
+  const { scoringMode, handicapSystem, startSignalMs, seriesEntrantCount, entries } = options;
 
   const raceStarters = entries.filter((e) => !!e.startedMarkedAt).length;
-  const raceFinishers = entries.filter(
-    (e) =>
-      e.outcome === "finished" &&
-      !!e.startedMarkedAt &&
-      !!e.officialFinishAt,
-  ).length;
+  const raceFinishers = entries.filter((e) => {
+    if (e.outcome !== "finished" || !e.startedMarkedAt) return false;
+    if (scoringMode === "positional") {
+      return e.finishPosition != null && e.finishPosition >= 1;
+    }
+    return !!e.officialFinishAt;
+  }).length;
 
   const counts: RacePenaltyCounts = {
     seriesEntrants: seriesEntrantCount,
@@ -72,6 +109,15 @@ export function computeAppendixARaceScores(options: {
       fixed_points: null,
     } satisfies PenaltyRuleInput);
 
+  const defaultDncRule =
+    options.penaltyRulesByOutcome.get("dnc") ??
+    ({
+      outcome_code: "dnc",
+      basis: "series_entrants",
+      plus: 1,
+      fixed_points: null,
+    } satisfies PenaltyRuleInput);
+
   interface RankRow {
     entry: RaceEntryScoringInput;
     sortKey: number;
@@ -85,29 +131,115 @@ export function computeAppendixARaceScores(options: {
 
   for (const e of entries) {
     if (e.outcome !== "finished") continue;
-    if (!e.startedMarkedAt || !e.officialFinishAt) continue;
+    if (!e.startedMarkedAt) continue;
+
+    if (scoringMode === "positional") {
+      const pos = e.finishPosition;
+      if (pos == null || pos < 1) continue;
+      const fleetId = e.fleetId ?? null;
+      const py = e.pyOverride ?? e.boatPy ?? null;
+      ranked.push({
+        entry: e,
+        sortKey: pos,
+        elapsedSec: null,
+        correctedSec: null,
+        py: py != null && py > 0 ? py : null,
+      });
+      continue;
+    }
+
+    if (!e.officialFinishAt) continue;
 
     const finishMs = new Date(e.officialFinishAt).getTime();
     const py = e.pyOverride ?? e.boatPy ?? null;
+    const timingFromDb =
+      e.storedElapsedSeconds !== undefined || e.storedCorrectedSeconds !== undefined;
+    const fleetId = e.fleetId ?? null;
+
+    const entryStartMs =
+      e.startSignalMs != null && Number.isFinite(e.startSignalMs) ? e.startSignalMs : startSignalMs;
 
     let elapsedSec: number | null = null;
-    if (startSignalMs != null && Number.isFinite(startSignalMs)) {
-      const raw = (finishMs - startSignalMs) / 1000;
+    if (entryStartMs != null && Number.isFinite(entryStartMs)) {
+      const raw = (finishMs - entryStartMs) / 1000;
       elapsedSec = raw > 0 ? raw : null;
     }
 
+    if (handicapSystem === "none" && timingFromDb) {
+      const elapsedFromDb = e.storedElapsedSeconds ?? null;
+      const sortKey =
+        elapsedFromDb != null && elapsedFromDb > 0 ? elapsedFromDb : finishMs;
+      ranked.push({
+        entry: e,
+        sortKey,
+        elapsedSec: elapsedFromDb,
+        correctedSec: null,
+        py: py != null && py > 0 ? py : null,
+      });
+      continue;
+    }
+
     if (handicapSystem === "portsmouth") {
+      if (timingFromDb) {
+        const elapsedFromDb = e.storedElapsedSeconds ?? null;
+        const correctedFromDb = e.storedCorrectedSeconds ?? null;
+
+        if (correctedFromDb == null || !Number.isFinite(correctedFromDb)) {
+          if (elapsedFromDb == null) {
+            mapRowToRaceScore.set(e.entryId, {
+              entryId: e.entryId,
+              userId: e.userId,
+              fleetId,
+              points: resolvePenaltyPoints(dnfRule, counts),
+              placeLabel: null,
+              correctedSeconds: null,
+              elapsedSeconds: null,
+              effectivePy: py,
+              penaltyOutcome: "dnf",
+              note:
+                "No valid race start time for elapsed — Portsmouth needs scheduled start → finish; scored using DNF formula.",
+            });
+            continue;
+          }
+          mapRowToRaceScore.set(e.entryId, {
+            entryId: e.entryId,
+            userId: e.userId,
+            fleetId,
+            points: resolvePenaltyPoints(dnfRule, counts),
+            placeLabel: null,
+            correctedSeconds: null,
+            elapsedSeconds: elapsedFromDb,
+            effectivePy: null,
+            penaltyOutcome: "dnf",
+            note:
+              "Missing Portsmouth Yardstick number — scored using DNF formula.",
+          });
+          continue;
+        }
+
+        ranked.push({
+          entry: e,
+          sortKey: correctedFromDb,
+          elapsedSec: elapsedFromDb,
+          correctedSec: correctedFromDb,
+          py,
+        });
+        continue;
+      }
+
       if (elapsedSec == null) {
         mapRowToRaceScore.set(e.entryId, {
           entryId: e.entryId,
           userId: e.userId,
+          fleetId,
           points: resolvePenaltyPoints(dnfRule, counts),
           placeLabel: null,
           correctedSeconds: null,
           elapsedSeconds: null,
           effectivePy: py,
+          penaltyOutcome: "dnf",
           note:
-            "Set race start signal to compute Portsmouth corrected time — scored using DNF formula.",
+            "No valid race start time for elapsed — Portsmouth needs scheduled start → finish; scored using DNF formula.",
         });
         continue;
       }
@@ -115,11 +247,13 @@ export function computeAppendixARaceScores(options: {
         mapRowToRaceScore.set(e.entryId, {
           entryId: e.entryId,
           userId: e.userId,
+          fleetId,
           points: resolvePenaltyPoints(dnfRule, counts),
           placeLabel: null,
           correctedSeconds: null,
           elapsedSeconds: elapsedSec,
           effectivePy: null,
+          penaltyOutcome: "dnf",
           note:
             "Missing Portsmouth Yardstick number — scored using DNF formula.",
         });
@@ -169,11 +303,13 @@ export function computeAppendixARaceScores(options: {
       mapRowToRaceScore.set(r.entry.entryId, {
         entryId: r.entry.entryId,
         userId: r.entry.userId,
+        fleetId: r.entry.fleetId ?? null,
         points: pts,
         placeLabel,
         correctedSeconds: r.correctedSec,
         elapsedSeconds: r.elapsedSec,
         effectivePy: r.py,
+        penaltyOutcome: "finished",
         note: null,
       });
     }
@@ -189,11 +325,34 @@ export function computeAppendixARaceScores(options: {
       continue;
     }
 
-    const o = e.outcome?.trim() ?? "";
-    let ruleKey = o;
+    const fleetId = e.fleetId ?? null;
+    const oRaw = e.outcome?.trim() ?? "";
+    const o = oRaw.toLowerCase();
+    let ruleKey = oRaw;
     let note: string | null = null;
 
-    if (!o) {
+    const noStartNoFinish = !e.startedMarkedAt && !e.officialFinishAt;
+    if (noStartNoFinish && (!o || o === "finished")) {
+      const points = resolvePenaltyPoints(defaultDncRule, counts);
+      out.push({
+        entryId: e.entryId,
+        userId: e.userId,
+        fleetId,
+        points,
+        placeLabel: null,
+        correctedSeconds: null,
+        elapsedSeconds: null,
+        effectivePy: null,
+        penaltyOutcome: "dnc",
+        note:
+          o === "finished"
+            ? "Marked finished without start and finish time — scored as DNC (did not compete)."
+            : "Entered but not seen in the start area — scored as DNC (did not compete).",
+      });
+      continue;
+    }
+
+    if (!oRaw) {
       ruleKey = "dnf";
       note = "Outcome not set — scored using DNF formula.";
     } else if (o === "finished") {
@@ -202,6 +361,8 @@ export function computeAppendixARaceScores(options: {
     } else if (!penaltyOutcomeCodes().has(o)) {
       ruleKey = "dnf";
       note = "Unknown outcome — scored using DNF formula.";
+    } else {
+      ruleKey = o;
     }
 
     const rule =
@@ -214,22 +375,89 @@ export function computeAppendixARaceScores(options: {
     out.push({
       entryId: e.entryId,
       userId: e.userId,
+      fleetId,
       points,
       placeLabel: null,
       correctedSeconds: null,
       elapsedSeconds: null,
       effectivePy: null,
+      penaltyOutcome: penaltyOutcomeCodes().has(ruleKey.toLowerCase()) ? ruleKey.toLowerCase() : "dnf",
       note,
     });
   }
 
-  out.sort((a, b) => {
-    const pa = a.placeLabel != null ? 0 : 1;
-    const pb = b.placeLabel != null ? 0 : 1;
-    if (pa !== pb) return pa - pb;
-    if (a.points !== b.points) return a.points - b.points;
-    return a.entryId.localeCompare(b.entryId);
-  });
+  return sortRaceScoreRows(out);
+}
 
-  return out;
+/** Appendix A low-point scores; places and starter/finisher penalties are computed per race fleet. */
+export function computeAppendixARaceScores(options: {
+  scoringMode?: RaceScoringMode;
+  handicapSystem: HandicapSystem;
+  startSignalMs: number | null;
+  seriesEntrantCount: number;
+  entries: RaceEntryScoringInput[];
+  penaltyRulesByOutcome: Map<string, PenaltyRuleInput>;
+}): RaceScoreRow[] {
+  const scoringMode = options.scoringMode ?? "handicap";
+  const byFleet = new Map<string, RaceEntryScoringInput[]>();
+  for (const e of options.entries) {
+    const key = fleetPartitionKey(e.fleetId);
+    const list = byFleet.get(key) ?? [];
+    list.push(e);
+    byFleet.set(key, list);
+  }
+
+  const all: RaceScoreRow[] = [];
+  for (const group of byFleet.values()) {
+    all.push(...scoreAppendixAEntriesInFleetGroup({ ...options, scoringMode, entries: group }));
+  }
+
+  return all;
+}
+
+/** Order race score rows into fleet sections (race_fleets sort_order, then unassigned). */
+export function groupRaceScoresByFleet(
+  scores: RaceScoreRow[],
+  raceFleets: { id: string; name: string }[],
+): RaceFleetScoreSection[] {
+  const byFleetKey = new Map<string, RaceScoreRow[]>();
+  for (const sr of scores) {
+    const key = fleetPartitionKey(sr.fleetId);
+    const list = byFleetKey.get(key) ?? [];
+    list.push(sr);
+    byFleetKey.set(key, list);
+  }
+
+  const sections: RaceFleetScoreSection[] = [];
+  for (const f of raceFleets) {
+    const fleetScores = byFleetKey.get(f.id);
+    if (!fleetScores?.length) continue;
+    sections.push({
+      fleetId: f.id,
+      fleetName: f.name,
+      scores: sortRaceScoreRows(fleetScores),
+    });
+    byFleetKey.delete(f.id);
+  }
+
+  const unassigned = byFleetKey.get("");
+  if (unassigned?.length) {
+    sections.push({
+      fleetId: null,
+      fleetName: "Unassigned fleet",
+      scores: sortRaceScoreRows(unassigned),
+    });
+    byFleetKey.delete("");
+  }
+
+  for (const [key, fleetScores] of byFleetKey) {
+    if (!fleetScores.length) continue;
+    sections.push({
+      fleetId: key,
+      fleetName: "Fleet",
+      scores: sortRaceScoreRows(fleetScores),
+    });
+  }
+
+  return sections;
 }

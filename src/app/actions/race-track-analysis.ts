@@ -7,11 +7,13 @@ import {
   executeAnalysis,
   serializeAnalysisForDb,
   DETECTION_DEFAULTS,
-  parseFIT,
-  parseGPX,
 } from "@/lib/sailing-analysis";
 import type { MarkOverride } from "@/lib/sailing-analysis/types";
-import { fetchStravaTrackPoints, getStravaConnection } from "@/lib/strava";
+import {
+  mergeRaceStartIntoCourseSetup,
+  resolveRaceStartUtcMs,
+} from "@/lib/sailing-analysis/race-start-from-schedule";
+import { loadTrackPointsForSubmission } from "@/lib/track-points-loader";
 
 async function requireRaceStaff(groupId: string, raceId: string) {
   const { supabase, user } = await getServerAuth();
@@ -43,26 +45,7 @@ async function loadPointsForSubmission(
     storage_path: string | null;
   },
 ) {
-  if (sub.track_source === "strava") {
-    const conn = await getStravaConnection(supabase, sub.user_id);
-    if (!conn) return [];
-    return fetchStravaTrackPoints(conn, sub.external_activity_id);
-  }
-  if (!sub.storage_path) return [];
-  const jsonPath = `${sub.user_id}/${sub.external_activity_id}.json`;
-  const { data: cached } = await supabase.storage.from("race-tracks").download(jsonPath);
-  if (cached) {
-    try {
-      return JSON.parse(await cached.text()) as { lat: number; lon: number; time: number }[];
-    } catch {
-      /* fall through */
-    }
-  }
-  const { data } = await supabase.storage.from("race-tracks").download(sub.storage_path);
-  if (!data) return [];
-  const name = sub.storage_path.toLowerCase();
-  if (name.endsWith(".gpx")) return parseGPX(await data.text());
-  return parseFIT(await data.arrayBuffer());
+  return loadTrackPointsForSubmission(supabase, sub.user_id, sub, { staffView: true });
 }
 
 export async function saveRaceAnalysisSettingsAction(formData: FormData) {
@@ -92,6 +75,9 @@ export async function saveRaceAnalysisSettingsAction(formData: FormData) {
   }
 
   const { supabase } = await requireRaceStaff(groupId, raceId);
+
+  const raceStartUtcMs = await resolveRaceStartUtcMs(supabase, raceId);
+  course_setup = mergeRaceStartIntoCourseSetup(course_setup, raceStartUtcMs);
 
   await supabase.from("race_analysis_settings").upsert(
     {
@@ -157,13 +143,21 @@ export async function confirmRaceAnalysisCompleteAction(formData: FormData) {
     const points = await loadPointsForSubmission(supabase, sub);
     if (points.length < 20) continue;
 
+    const raceStartUtcMs = await resolveRaceStartUtcMs(supabase, raceId);
+    const firstT = points[0]?.time;
+    const courseSetup = mergeRaceStartIntoCourseSetup(
+      (settings.course_setup ?? {}) as Record<string, unknown>,
+      raceStartUtcMs,
+      firstT ?? null,
+    );
+
     const results = executeAnalysis({
       points,
       marks: marks ?? [],
       course,
       laps: settings.laps ?? 1,
       markOverrides: (settings.mark_overrides ?? {}) as Record<string, MarkOverride>,
-      courseSetup: (settings.course_setup ?? {}) as Record<string, unknown>,
+      courseSetup,
       detSettings: (settings.det_settings ?? DETECTION_DEFAULTS) as typeof DETECTION_DEFAULTS,
       userWind: settings.wind_direction,
     });
@@ -178,7 +172,15 @@ export async function confirmRaceAnalysisCompleteAction(formData: FormData) {
 
     await supabase
       .from("race_track_submissions")
-      .update({ status: "ready", updated_at: new Date().toISOString() })
+      .update({
+        status: "ready",
+        course_letter: settings.course_letter,
+        laps: settings.laps ?? 1,
+        mark_overrides: settings.mark_overrides ?? {},
+        course_setup: courseSetup,
+        det_settings: settings.det_settings ?? DETECTION_DEFAULTS,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", sub.id);
   }
 

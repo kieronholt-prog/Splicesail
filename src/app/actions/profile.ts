@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { getServerAuth } from "@/lib/supabase/auth-cache";
 import { redirect } from "next/navigation";
 
 function checkboxOn(formData: FormData, name: string): boolean {
@@ -9,10 +9,7 @@ function checkboxOn(formData: FormData, name: string): boolean {
 }
 
 export async function updateProfileAction(formData: FormData) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user } = await getServerAuth();
 
   if (!user) {
     redirect("/login");

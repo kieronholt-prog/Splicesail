@@ -34,14 +34,16 @@ export async function proxy(request: NextRequest) {
 
   await supabase.auth.getUser();
 
+  supabaseResponse.headers.set("x-pathname", request.nextUrl.pathname);
   return supabaseResponse;
 }
 
 export const config = {
   matcher: [
     /*
-     * Skip static assets and image optimization; refresh auth for everything else.
+     * Skip static assets, image optimization, and cheap probes — they should not block on Auth refresh.
+     * Health HTML + JSON are used for monitoring; session refresh belongs on authenticated app routes only.
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|health$|health/|api/health(?:/|$)|api/calendar/feeds(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

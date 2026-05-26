@@ -7,12 +7,12 @@ export interface DiscardBandInput {
 /** Pick the tightest matching band (largest races_from that still applies). */
 export function discardsForCompletedCount(
   bands: DiscardBandInput[],
-  completedFinalRaceCount: number,
+  completedRaceCount: number,
 ): number {
   let best: DiscardBandInput | null = null;
   for (const b of bands) {
-    if (completedFinalRaceCount < b.races_from) continue;
-    if (b.races_to != null && completedFinalRaceCount > b.races_to) continue;
+    if (completedRaceCount < b.races_from) continue;
+    if (b.races_to != null && completedRaceCount > b.races_to) continue;
     if (!best || b.races_from > best.races_from) best = b;
   }
   return best?.discards ?? 0;
@@ -54,6 +54,8 @@ export function compareAppendixA8Lex(
 }
 
 export interface SeriesStandingRow {
+  /** Boat id (member boat or guest hull id). */
+  boatId: string;
   userId: string;
   netScore: number;
   allScores: number[];
@@ -61,29 +63,32 @@ export interface SeriesStandingRow {
 }
 
 export function computeSeriesStandings(args: {
-  sailorIds: string[];
-  raceResults: { raceId: string; pointsByUserId: Map<string, number> }[];
+  boatIds: string[];
+  raceResults: { raceId: string; pointsByBoatId: Map<string, number> }[];
   discardBands: DiscardBandInput[];
 }): SeriesStandingRow[] {
-  const completedFinal = args.raceResults.length;
+  const completedRaceCount = args.raceResults.length;
   const discardCount = discardsForCompletedCount(
     args.discardBands,
-    completedFinal,
+    completedRaceCount,
   );
 
   const rows: SeriesStandingRow[] = [];
 
-  for (const userId of args.sailorIds) {
+  for (const boatId of args.boatIds) {
     const allScores: number[] = [];
     for (const rr of args.raceResults) {
-      const p = rr.pointsByUserId.get(userId);
+      const p = rr.pointsByBoatId.get(boatId);
       if (p !== undefined) allScores.push(p);
     }
+
+    if (allScores.length === 0) continue;
 
     const netScore = netScoreAfterDiscards(allScores, discardCount);
 
     rows.push({
-      userId,
+      boatId,
+      userId: "",
       netScore,
       allScores,
       discardCount,

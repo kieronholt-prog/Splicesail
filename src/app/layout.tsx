@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Suspense } from "react";
-import { SiteNav, SiteNavFallback } from "@/components/site-nav";
+import { SPLICE_TAGLINE } from "@/components/splice-brand";
+import { PRODUCTION_APP_ORIGIN } from "@/lib/app-url";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,8 +15,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Race Manager",
-  description: "Club racing: sailors, admin, and race officer tools",
+  metadataBase: new URL(PRODUCTION_APP_ORIGIN),
+  title: "Splice",
+  description: `${SPLICE_TAGLINE} Club dinghy racing for sailors, admins, and race officers.`,
 };
 
 export default function RootLayout({
@@ -30,9 +31,6 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans">
-        <Suspense fallback={<SiteNavFallback />}>
-          <SiteNav />
-        </Suspense>
         {children}
       </body>
     </html>

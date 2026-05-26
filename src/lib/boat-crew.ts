@@ -63,3 +63,62 @@ export function crewTemplateFromForm(
 
   return null;
 }
+
+/**
+ * Human-readable helm / crew line for lists (owner name when "use account owner").
+ */
+/** Crew shown for racing: optional per-race override, else hull defaults from `boats`. */
+export function resolveEffectiveCrewTemplate(
+  crewTemplateOverride: unknown,
+  boatCrewTemplate: unknown,
+): CrewTemplate {
+  const override = crewTemplateOverride as Partial<CrewTemplate> | null | undefined;
+  const boat = boatCrewTemplate as CrewTemplate | null | undefined;
+
+  const fromOverride =
+    override &&
+    override.helm &&
+    typeof override.helm === "object" &&
+    "use_account_owner" in override.helm
+      ? ({
+          helm: override.helm as CrewPerson,
+          crew: Array.isArray(override.crew) ? (override.crew as CrewPerson[]) : [],
+        } satisfies CrewTemplate)
+      : null;
+
+  if (fromOverride) return fromOverride;
+
+  if (boat?.helm && typeof boat.helm === "object") {
+    return {
+      helm: boat.helm,
+      crew: Array.isArray(boat.crew) ? boat.crew : [],
+    };
+  }
+
+  return {
+    helm: { use_account_owner: true, contact_name: null, contact_phone: null },
+    crew: [],
+  };
+}
+
+export function helmAndCrewDisplayLabels(
+  crewTemplate: unknown,
+  handedness: string,
+  ownerDisplayName: string | null,
+): { helm: string; crew: string } {
+  const tpl = crewTemplate as CrewTemplate | null;
+  if (!tpl || typeof tpl !== "object" || tpl.helm == null) {
+    return { helm: "—", crew: "—" };
+  }
+  const owner = ownerDisplayName?.trim() || "Owner";
+  const helmStr = tpl.helm.use_account_owner
+    ? owner
+    : (tpl.helm.contact_name ?? "").trim() || "—";
+  if (handedness === "single") {
+    return { helm: helmStr, crew: "—" };
+  }
+  const parts = (tpl.crew ?? []).map((p) =>
+    p.use_account_owner ? owner : (p.contact_name ?? "").trim() || "—",
+  );
+  return { helm: helmStr, crew: parts.length ? parts.join(" · ") : "—" };
+}

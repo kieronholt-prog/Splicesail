@@ -9,6 +9,11 @@ const DEFAULT_SF_LINE_ENDS={
   endA:{lat:50.851722,lon:-1.309129},
   endB:{lat:50.851762,lon:-1.307463},
 };
+/** Per-leg track colours on map (`leg0`…`leg15`, then repeat). Must match `mapboxTrackLineColorByKindExpr`. */
+const TRACK_LEG_SEGMENT_PALETTE=["#3b82f6","#f59e0b","#10b981","#a855f7","#ef4444","#06b6d4","#eab308","#f472b6","#94a3b8","#6366f1","#14b8a6","#ec4899","#84cc16","#f97316","#8b5cf6","#22c55e"];
+const TRACK_LEG_SKIP_COLOR="#64748b";
+const MAP_RND_BISECTOR_LINE="#a855f7";
+const MAP_MANEUVER_COLORS={port:"#ff4a6a",stbd:"#4aff8a",tack:"#ff6b4a",gybe:"#4adfff",trkRound:"#ff9500"};
 
 const RE=6371000,D=Math.PI/180;
 function hav(a1,o1,a2,o2){const dl=(a2-a1)*D,do2=(o2-o1)*D;const a=Math.sin(dl/2)**2+Math.cos(a1*D)*Math.cos(a2*D)*Math.sin(do2/2)**2;return 2*RE*Math.asin(Math.sqrt(a))}
@@ -3330,6 +3335,13 @@ function buildSpeedTimeSeries(en,maxMark){
   return[...base,{time:t,speed:sp,cog}].sort((a,b)=>a.time-b.time);
 }
 
+/** Map / timeline manoeuvre colour from crossing (matches map badges). */
+function manoeuvreBadgeBaseColor(m){
+  if(m.crossing==="P→S")return MAP_MANEUVER_COLORS.port;
+  if(m.crossing==="S→P")return MAP_MANEUVER_COLORS.stbd;
+  return m.type==="gybe"?MAP_MANEUVER_COLORS.gybe:MAP_MANEUVER_COLORS.tack;
+}
+
 function buildTimelineDecorations(analysis){
   const t0=analysis?.points?.[0]?.time??0;
   const legBands=(analysis?.legs||[]).map((l,idx)=>{
@@ -4012,5 +4024,13 @@ export {
   customCourseMarkRowsFromRecipe,
   normalizeCustomCourseRecipe,
   buildOneSidedGateFC,
+  buildMarkGateDebugFC,
+  buildTrackSegmentFeatureCollection,
+  buildAllTacksVmgOverlayData,
+  mapboxTrackLineColorByKindExpr,
+  manoeuvreBadgeBaseColor,
   courseGeometrySignature,
+  TRACK_LEG_SEGMENT_PALETTE,
+  TRACK_LEG_SKIP_COLOR,
+  MAP_RND_BISECTOR_LINE,
 };

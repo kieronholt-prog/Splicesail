@@ -1,27 +1,36 @@
 import Link from "next/link";
+import { type Handedness, type HomeAmendRaceTarget } from "@/components/home-amend-race-details";
 import {
-  HomeAmendRaceDetailsButton,
-  type Handedness,
-  type HomeAmendRaceTarget,
-} from "@/components/home-amend-race-details";
-import { HomeNextRaceTallyPanel, type HomeBoatTallyPanelRow } from "@/components/home-next-race-tally";
+  HomeNextRaceTallyPanel,
+  type HomeBoatTallyPanelRow,
+  type HomeTalliedAfloatListItem,
+} from "@/components/home-next-race-tally";
+import { HomeBoatRaceResultsTable } from "@/components/home-boat-race-results-table";
+import { HomeRecentRaceResultsTable } from "@/components/home-recent-race-results-table";
+import { HomeTrackNotificationsBanner } from "@/components/sailing-analysis/home-track-notifications-banner";
+import { fetchHomeBoatRaceResults } from "@/lib/home-boat-race-results";
+import { fetchHomeRecentRaceResults } from "@/lib/home-recent-race-results";
 import type { CrewTemplate } from "@/lib/boat-crew";
 import { resolveEffectiveCrewTemplate } from "@/lib/boat-crew";
 import { fleetStartUtcMs, homeFeaturedRaceVisibleUntilMs } from "@/lib/tally-window";
 import {
   formatClubDdMmmYyyyFromIso,
   formatClubDdMmmYyyyHmFromIso,
-  formatClubDdMmmYyyyHmsFromIso,
   formatClubHmFromIso,
 } from "@/lib/club-display-format";
-import {
-  clubTodayYmd,
-  clubWallYmdFromUtcMs,
-  formatClubDateMedium,
-  resolveClubIanaTimeZone,
-} from "@/lib/club-time";
+import { clubTodayYmd, clubWallYmdFromUtcMs, resolveClubIanaTimeZone } from "@/lib/club-time";
 import { getServerAuth } from "@/lib/supabase/auth-cache";
-import { fleetStartOffsetMinutesByRaceBoat } from "@/lib/race-boat-fleet-start-offset";
+import { fetchHomeTrackNotifications } from "@/lib/home-track-notifications";
+import {
+  fleetMatchByRaceBoat,
+  fleetStartOffsetMinutesByRaceBoat,
+  type RaceBoatFleetMatch,
+} from "@/lib/race-boat-fleet-start-offset";
+import { resolveClubClassFlagsForRaceFleets } from "@/lib/resolve-race-fleet-class-flags";
+import { buildPursuitTallySlotDisplays } from "@/lib/build-pursuit-tally-slots";
+import { loadPursuitSlotsForRace, pursuitClassStartAtByKey } from "@/lib/pursuit-slots-server";
+import { normalizeRaceType } from "@/lib/race-type";
+import type { PursuitTallySlotDisplay } from "@/components/home-next-race-tally";
 import { wallTimeMs } from "@/lib/wall-time";
 
 export type HomeDashboardQuery =
@@ -41,10 +50,31 @@ function formatOutcomeDisplay(code?: string | null) {
     retired: "Retired",
     dnf: "DNF",
     dns: "DNS",
+    dnc: "DNC",
     dsq: "DSQ",
     ocs: "OCS",
   };
   return m[code] ?? code;
+}
+
+function homeBoatTypeDisplay(
+  className: string | null | undefined,
+  ryaClassKey: string | null | undefined,
+  classDisplayByKey: Map<string, string>,
+): string {
+  const cn = className?.trim();
+  if (cn) return cn;
+  const key = ryaClassKey?.trim();
+  if (key) return classDisplayByKey.get(key) ?? key;
+  return "—";
+}
+
+function homeSailNumberDisplay(
+  sailOverride: string | null | undefined,
+  defaultSail: string | null | undefined,
+): string {
+  const s = (sailOverride?.trim() || defaultSail?.trim() || "").trim();
+  return s || "—";
 }
 
 function parseHandedness(raw: string | null | undefined): Handedness {
@@ -123,35 +153,12 @@ export async function HomeDashboard({
 }) {
   const { supabase } = await getServerAuth();
 
-  const [{ data: regRows }, finishQueryResult] = await Promise.all([
-    supabase.from("series_registrations").select("series_id").eq("user_id", userId),
-    supabase
-      .from("race_entries")
-      .select(
-        `
-        id,
-        boat_id,
-        sail_number_override,
-        crew_template_override,
-        race_finishes!inner ( id, official_finish_at ),
-        races!inner (
-          id,
-          name,
-          scheduled_at,
-          results_final,
-          series_id,
-          series (
-            group_id,
-            groups ( name, iana_timezone ),
-            name
-          )
-        )
-      `,
-      )
-      .eq("user_id", userId)
-      .order("updated_at", { ascending: false })
-      .limit(12),
-  ]);
+  const trackNotifications = await fetchHomeTrackNotifications(supabase, userId);
+
+  const { data: regRows } = await supabase
+    .from("series_registrations")
+    .select("series_id")
+    .eq("user_id", userId);
 
   const registeredSeriesIds = [...new Set((regRows ?? []).map((r) => r.series_id))];
 
@@ -229,6 +236,14 @@ export async function HomeDashboard({
 
   const seriesIds = seriesBase.map((s) => s.seriesId);
 
+  const recentRaceResults =
+    seriesIds.length > 0 ? await fetchHomeRecentRaceResults(supabase, userId, seriesIds) : null;
+
+  const boatRaceResults =
+    seriesBase.length > 0
+      ? await fetchHomeBoatRaceResults(supabase, userId, seriesBase, clubTzByGroupId)
+      : [];
+
   const homeRenderNowMs = wallTimeMs();
   const HOME_RACE_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
   const HOME_RACE_FOCUS_MAX = 6;
@@ -241,6 +256,7 @@ export async function HomeDashboard({
     clubName: string | null;
     groupId: string;
     seriesId: string;
+    raceType: string;
   };
 
   let featuredRaceMetas: FeaturedRaceMeta[] = [];
@@ -254,6 +270,7 @@ export async function HomeDashboard({
         id,
         name,
         scheduled_at,
+        race_type,
         series_id,
         series (
           name,
@@ -389,149 +406,26 @@ export async function HomeDashboard({
             clubName,
             groupId: seRow.group_id,
             seriesId: r.series_id,
+            raceType: (r as { race_type?: string }).race_type ?? "handicap",
           });
         }
       }
     }
   }
 
-  const finishEntryRows = finishQueryResult.data;
-
-  type FinishRow = {
-    raceId: string;
-    groupId: string;
-    seriesId: string;
-    raceName: string;
-    scheduledAt: string;
-    seriesName: string | undefined;
-    clubName: string | null;
-    officialFinishAt: string;
-    resultsFinal: boolean;
-    entry: {
-      id: string;
-      sail_number_override: string | null;
-      crew_template_override: unknown;
-      boat_id: string | null;
-    };
-  };
-
-  const finishRows: FinishRow[] = (finishEntryRows ?? [])
-    .map((e) => {
-      const rawR = e.races;
-      const race = Array.isArray(rawR) ? rawR[0] : rawR;
-      const rawF = e.race_finishes;
-      const fin = Array.isArray(rawF) ? rawF[0] : rawF;
-      if (!race || typeof race !== "object" || !fin || typeof fin !== "object") return null;
-      const ra = race as {
-        id: string;
-        name: string;
-        scheduled_at: string;
-        results_final: boolean | null;
-        series_id: string;
-        series:
-          | {
-              name: string;
-              group_id: string;
-              groups: { name: string } | { name: string }[] | null;
-            }
-          | {
-              name: string;
-              group_id: string;
-              groups: { name: string } | { name: string }[] | null;
-            }[]
-          | null;
-      };
-      const sraw = ra.series;
-      const se = Array.isArray(sraw) ? sraw[0] : sraw;
-      const clubName = (() => {
-        if (!se || typeof se !== "object") return null;
-        const g = se.groups;
-        if (!g) return null;
-        return Array.isArray(g) ? g[0]?.name : g.name;
-      })();
-
-      const seriesId = ra.series_id;
-      const groupId =
-        se && typeof se === "object" && !Array.isArray(se) && "group_id" in se
-          ? (se as { group_id: string }).group_id
-          : "";
-
-      if (groupId && se && typeof se === "object" && !Array.isArray(se)) {
-        const g = (se as { groups?: unknown }).groups;
-        const gOne = Array.isArray(g) ? g[0] : g;
-        if (gOne && typeof gOne === "object" && gOne !== null && "iana_timezone" in gOne) {
-          clubTzByGroupId.set(
-            groupId,
-            resolveClubIanaTimeZone((gOne as { iana_timezone?: string | null }).iana_timezone),
-          );
-        }
-      }
-
-      return {
-        raceId: ra.id,
-        groupId,
-        seriesId,
-        raceName: ra.name,
-        scheduledAt: ra.scheduled_at,
-        seriesName: se && typeof se === "object" && !Array.isArray(se) ? se.name : undefined,
-        clubName,
-        officialFinishAt: (fin as { official_finish_at: string }).official_finish_at,
-        resultsFinal: ra.results_final === true,
-        entry: {
-          id: String((e as { id: unknown }).id),
-          sail_number_override: (e as { sail_number_override?: string | null }).sail_number_override ?? null,
-          crew_template_override: (e as { crew_template_override?: unknown }).crew_template_override ?? null,
-          boat_id: (e as { boat_id?: string | null }).boat_id ?? null,
-        },
-      };
-    })
-    .filter((x): x is NonNullable<typeof x> => x != null && Boolean(x.groupId));
-
-  const allBoatIds = new Set<string>();
-  for (const fr of finishRows) {
-    if (fr.entry.boat_id) allBoatIds.add(fr.entry.boat_id);
-  }
-
-  let boatsDetailById = new Map<
-    string,
-    { label: string; handedness: string | null; crew_template: unknown }
-  >();
-  if (allBoatIds.size) {
-    const { data: bts } = await supabase
-      .from("boats")
-      .select("id, label, handedness, crew_template")
-      .eq("owner_user_id", userId)
-      .in("id", [...allBoatIds]);
-    boatsDetailById = new Map(
-      (bts ?? []).map((b) => [
-        b.id,
-        { label: b.label, handedness: b.handedness ?? null, crew_template: b.crew_template },
-      ] as const),
-    );
-    const missing = [...allBoatIds].filter((id) => !boatsDetailById.has(id));
-    if (missing.length) {
-      const { data: btsExtra } = await supabase
-        .from("boats")
-        .select("id, label, handedness, crew_template")
-        .eq("owner_user_id", userId)
-        .in("id", missing);
-      for (const b of btsExtra ?? []) {
-        boatsDetailById.set(b.id, {
-          label: b.label,
-          handedness: b.handedness ?? null,
-          crew_template: b.crew_template,
-        });
-      }
-    }
-  }
-
   const boatsForAmend = new Map<string, { handedness: string | null; crew_template: unknown }>();
-  for (const [id, v] of boatsDetailById) {
-    boatsForAmend.set(id, { handedness: v.handedness, crew_template: v.crew_template });
-  }
 
   const featuredSeriesUnique = [...new Set(featuredRaceMetas.map((m) => m.seriesId))];
   const signupBoatsBySeriesId = new Map<string, { id: string; label: string }[]>();
+
+  type SignupBoatMeta = {
+    label: string;
+    class_name: string | null;
+    rya_class_key: string | null;
+    default_sail_number: string | null;
+  };
+  const signupBoatMetaById = new Map<string, SignupBoatMeta>();
+  const classDisplayByRyaKey = new Map<string, string>();
 
   if (featuredSeriesUnique.length) {
     const featuredSignupBoatIdSet = new Set<string>();
@@ -540,15 +434,32 @@ export async function HomeDashboard({
         featuredSignupBoatIdSet.add(bid);
       }
     }
-
-    const labelBySignupBoatId = new Map<string, string>();
     if (featuredSignupBoatIdSet.size) {
       const { data: bows } = await supabase
         .from("boats")
-        .select("id, label")
+        .select("id, label, class_name, rya_class_key, default_sail_number")
         .eq("owner_user_id", userId)
         .in("id", [...featuredSignupBoatIdSet]);
-      for (const b of bows ?? []) labelBySignupBoatId.set(b.id, b.label);
+      const ryaKeys = new Set<string>();
+      for (const b of bows ?? []) {
+        signupBoatMetaById.set(b.id, {
+          label: b.label,
+          class_name: (b.class_name as string | null) ?? null,
+          rya_class_key: (b.rya_class_key as string | null) ?? null,
+          default_sail_number: (b.default_sail_number as string | null) ?? null,
+        });
+        const k = (b.rya_class_key as string | null)?.trim();
+        if (k) ryaKeys.add(k);
+      }
+      if (ryaKeys.size) {
+        const { data: catRows } = await supabase
+          .from("boat_classes")
+          .select("class_key, display_name")
+          .in("class_key", [...ryaKeys]);
+        for (const r of catRows ?? []) {
+          classDisplayByRyaKey.set(r.class_key, r.display_name);
+        }
+      }
     }
 
     for (const sid of featuredSeriesUnique) {
@@ -556,7 +467,7 @@ export async function HomeDashboard({
       signupBoatsBySeriesId.set(
         sid,
         ids
-          .map((bid) => ({ id: bid, label: labelBySignupBoatId.get(bid) ?? bid }))
+          .map((bid) => ({ id: bid, label: signupBoatMetaById.get(bid)?.label ?? bid }))
           .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" })),
       );
     }
@@ -636,35 +547,229 @@ export async function HomeDashboard({
       })),
     ) ?? [];
 
-  const offsetFeaturedByRaceBoat =
+  const featuredMatchByRaceBoat =
     featuredOffsetRequests.length > 0
-      ? await fleetStartOffsetMinutesByRaceBoat(supabase, featuredOffsetRequests)
-      : new Map<string, number>();
+      ? await fleetMatchByRaceBoat(supabase, featuredOffsetRequests)
+      : new Map<string, RaceBoatFleetMatch>();
+
+  const classFlagByFleetId = new Map<string, string | null>();
+  const featuredRaceIdListForFlags = featuredRaceMetas.map((m) => m.raceId);
+  if (featuredRaceIdListForFlags.length) {
+    const { data: rfRows } = await supabase
+      .from("race_fleets")
+      .select("id, race_id, name, group_fleet_id")
+      .in("race_id", featuredRaceIdListForFlags);
+    const raceToGroup = new Map(featuredRaceMetas.map((m) => [m.raceId, m.groupId] as const));
+    const fleetsByGroup = new Map<
+      string,
+      { id: string; name: string; group_fleet_id: string | null }[]
+    >();
+    for (const rf of rfRows ?? []) {
+      const gid = raceToGroup.get(rf.race_id as string);
+      if (!gid) continue;
+      let list = fleetsByGroup.get(gid);
+      if (!list) {
+        list = [];
+        fleetsByGroup.set(gid, list);
+      }
+      list.push({
+        id: rf.id as string,
+        name: String(rf.name ?? ""),
+        group_fleet_id: (rf.group_fleet_id as string | null) ?? null,
+      });
+    }
+    for (const [gid, sources] of fleetsByGroup) {
+      const flags = await resolveClubClassFlagsForRaceFleets(supabase, gid, sources);
+      for (const [fid, flag] of flags) {
+        classFlagByFleetId.set(fid, flag);
+      }
+    }
+  }
+
+  const talliedAfloatByRaceFleetKey = new Map<string, HomeTalliedAfloatListItem[]>();
+  const raceMetaById = new Map(featuredRaceMetas.map((m) => [m.raceId, m] as const));
+
+  if (featuredRaceIdList.length > 0) {
+    const { data: talliedEntryRows } = await supabase
+      .from("race_entries")
+      .select("race_id, fleet_id, boat_id, sail_number_override, tally_afloat_at, user_id")
+      .in("race_id", featuredRaceIdList)
+      .not("tally_afloat_at", "is", null);
+
+    const talliedBoatIds = new Set<string>();
+    const talliedUserIds = new Set<string>();
+    for (const row of talliedEntryRows ?? []) {
+      if (row.boat_id) talliedBoatIds.add(row.boat_id as string);
+      if (row.user_id) talliedUserIds.add(row.user_id as string);
+    }
+
+    const talliedLabelByBoatId = new Map<string, string>();
+    const talliedDefaultSailByBoatId = new Map<string, string | null>();
+    if (talliedBoatIds.size) {
+      const { data: talliedBoats } = await supabase
+        .from("boats")
+        .select("id, label, default_sail_number")
+        .in("id", [...talliedBoatIds]);
+      for (const b of talliedBoats ?? []) {
+        talliedLabelByBoatId.set(b.id, b.label);
+        talliedDefaultSailByBoatId.set(b.id, (b.default_sail_number as string | null) ?? null);
+      }
+    }
+
+    const helmNameByUserId = new Map<string, string>();
+    if (talliedUserIds.size) {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, display_name")
+        .in("id", [...talliedUserIds]);
+      for (const p of profs ?? []) {
+        const name = (p.display_name as string | null)?.trim();
+        if (name) helmNameByUserId.set(p.id, name);
+      }
+    }
+
+    for (const row of talliedEntryRows ?? []) {
+      const raceId = row.race_id as string;
+      const boatId = row.boat_id as string | null;
+      const meta = raceMetaById.get(raceId);
+      if (!meta) continue;
+
+      let fleetId = row.fleet_id as string | null;
+      if (!fleetId && boatId) {
+        fleetId = featuredMatchByRaceBoat.get(`${raceId}\u0000${boatId}`)?.fleetId ?? null;
+      }
+      const fleetKey = fleetId ?? "";
+      const homeTz = clubTzByGroupId.get(meta.groupId) ?? resolveClubIanaTimeZone(null);
+
+      const item: HomeTalliedAfloatListItem = {
+        boatLabel: boatId ? (talliedLabelByBoatId.get(boatId) ?? "—") : "—",
+        sailDisplay: homeSailNumberDisplay(
+          row.sail_number_override as string | null,
+          boatId ? talliedDefaultSailByBoatId.get(boatId) : null,
+        ),
+        helmDisplay: helmNameByUserId.get(row.user_id as string) ?? "—",
+        talliedAtDisplay: formatClubHmFromIso(row.tally_afloat_at as string, homeTz),
+      };
+
+      const mapKey = `${raceId}\u0000${fleetKey}`;
+      let list = talliedAfloatByRaceFleetKey.get(mapKey);
+      if (!list) {
+        list = [];
+        talliedAfloatByRaceFleetKey.set(mapKey, list);
+      }
+      list.push(item);
+    }
+
+    for (const list of talliedAfloatByRaceFleetKey.values()) {
+      list.sort((a, b) => a.boatLabel.localeCompare(b.boatLabel, undefined, { sensitivity: "base" }));
+    }
+  }
 
   type HomeFeaturedRaceCard = FeaturedRaceMeta & {
     signupBoats: { id: string; label: string }[];
     tallyBoatRows: HomeBoatTallyPanelRow[];
-    boatAmends: {
-      boatId: string;
-      boatLabel: string;
-      ctx: HomeAmendRaceTarget;
-      crewEditable: boolean;
-    }[];
-    fleetStartMsHeader: number;
-    earliestFleetStartDisplay: string;
     homeTz: string;
+    firstStartDisplay: string;
   };
+
+  const pursuitContextByRaceId = new Map<
+    string,
+    {
+      classStartByKey: Map<string, string>;
+      buildSlotsForBoat: (boatId: string, talliedAfloat: boolean) => PursuitTallySlotDisplay[];
+    }
+  >();
+
+  for (const meta of featuredRaceMetas) {
+    if (normalizeRaceType(meta.raceType) !== "pursuit") continue;
+    const homeTz = clubTzByGroupId.get(meta.groupId) ?? resolveClubIanaTimeZone(null);
+    const slots = await loadPursuitSlotsForRace(supabase, meta.raceId);
+    const classStartByKey = await pursuitClassStartAtByKey(supabase, meta.raceId);
+
+    const { data: raceEntries } = await supabase
+      .from("race_entries")
+      .select("boat_id, sail_number_override, tally_afloat_at")
+      .eq("race_id", meta.raceId);
+
+    const entriesByClassKey = new Map<string, { sailDisplay: string; talliedAfloat: boolean }[]>();
+    for (const e of raceEntries ?? []) {
+      const boatId = e.boat_id as string | null;
+      if (!boatId) continue;
+      const boatMeta = signupBoatMetaById.get(boatId);
+      const ck = boatMeta?.rya_class_key?.trim();
+      if (!ck) continue;
+      const sail = homeSailNumberDisplay(
+        e.sail_number_override as string | null,
+        boatMeta?.default_sail_number ?? null,
+      );
+      const list = entriesByClassKey.get(ck) ?? [];
+      list.push({ sailDisplay: sail, talliedAfloat: !!e.tally_afloat_at });
+      entriesByClassKey.set(ck, list);
+    }
+
+    pursuitContextByRaceId.set(meta.raceId, {
+      classStartByKey,
+      buildSlotsForBoat: (boatId, talliedAfloat) => {
+        const ck = signupBoatMetaById.get(boatId)?.rya_class_key?.trim() ?? null;
+        return buildPursuitTallySlotDisplays({
+          slots,
+          clubTz: homeTz,
+          viewerClassKey: ck,
+          viewerTalliedAfloat: talliedAfloat,
+          entriesByClassKey,
+        });
+      },
+    });
+  }
 
   const featuredForHome: HomeFeaturedRaceCard[] = featuredRaceMetas.map((meta) => {
     const signupBoats = signupBoatsBySeriesId.get(meta.seriesId) ?? [];
     const homeTz = clubTzByGroupId.get(meta.groupId) ?? resolveClubIanaTimeZone(null);
 
+    const pursuitCtx = pursuitContextByRaceId.get(meta.raceId);
+
     const tallyBoatRows: HomeBoatTallyPanelRow[] = signupBoats.map((b) => {
       const entry = featuredEntriesByRaceBoat.get(`${meta.raceId}\u0000${b.id}`) ?? null;
-      const fleetOff = offsetFeaturedByRaceBoat.get(`${meta.raceId}\u0000${b.id}`) ?? 0;
+      const fleetMatch = featuredMatchByRaceBoat.get(`${meta.raceId}\u0000${b.id}`);
+      const fleetOff = fleetMatch?.offsetMinutes ?? 0;
+      const fleetId = fleetMatch?.fleetId ?? null;
+      const boatMeta = signupBoatMetaById.get(b.id);
+      const classKey = boatMeta?.rya_class_key?.trim() ?? "";
+      let classStartDisplay = "—";
+      if (pursuitCtx && classKey) {
+        const startIso = pursuitCtx.classStartByKey.get(classKey);
+        if (startIso) classStartDisplay = formatClubHmFromIso(startIso, homeTz);
+      } else {
+        const classStartMs = fleetStartUtcMs(meta.scheduledAt, fleetOff);
+        classStartDisplay = formatClubHmFromIso(new Date(classStartMs).toISOString(), homeTz);
+      }
+      const amendDetails =
+        entry?.id && entry.boat_id
+          ? (() => {
+              const amend = buildAmendContext(
+                meta.groupId,
+                meta.seriesId,
+                meta.raceId,
+                meta.name,
+                entry,
+                boatsForAmend,
+              );
+              return { ctx: amend.ctx, crewEditable: amend.crewEditable };
+            })()
+          : null;
+      const afloatRecorded = !!entry?.tally_afloat_at;
       return {
         boatId: b.id,
         label: b.label,
+        boatTypeDisplay: homeBoatTypeDisplay(
+          boatMeta?.class_name,
+          boatMeta?.rya_class_key,
+          classDisplayByRyaKey,
+        ),
+        sailNumberDisplay: homeSailNumberDisplay(
+          entry?.sail_number_override,
+          boatMeta?.default_sail_number,
+        ),
         fleetOffsetMinutes: fleetOff,
         tally_afloat_at: entry?.tally_afloat_at ?? null,
         tally_ashore_at: entry?.tally_ashore_at ?? null,
@@ -672,53 +777,40 @@ export async function HomeDashboard({
         afloatLoggedDisplay: formatClubDdMmmYyyyHmFromIso(entry?.tally_afloat_at ?? null, homeTz),
         ashoreLoggedDisplay: formatClubDdMmmYyyyHmFromIso(entry?.tally_ashore_at ?? null, homeTz),
         outcomeSummaryDisplay: formatOutcomeDisplay(entry?.outcome),
+        amendDetails,
+        fleetId,
+        fleetName: fleetMatch?.fleetName ?? null,
+        clubClassFlag: fleetId ? (classFlagByFleetId.get(fleetId) ?? null) : null,
+        classStartDisplay,
+        talliedAfloatList: talliedAfloatByRaceFleetKey.get(`${meta.raceId}\u0000${fleetId ?? ""}`) ?? [],
+        pursuitTallySlots: pursuitCtx
+          ? pursuitCtx.buildSlotsForBoat(b.id, afloatRecorded)
+          : undefined,
       };
     });
 
-    const headerOffsets = tallyBoatRows.map((r) => r.fleetOffsetMinutes);
-    const minFleetOff = headerOffsets.length ? Math.min(...headerOffsets) : 0;
-    const fleetStartMsHeader = fleetStartUtcMs(meta.scheduledAt, minFleetOff);
-    const earliestFleetStartDisplay = formatClubDdMmmYyyyHmFromIso(
-      new Date(fleetStartMsHeader).toISOString(),
-      homeTz,
-    );
-
-    const boatAmends = signupBoats
-      .map((b) => {
-        const entry = featuredEntriesByRaceBoat.get(`${meta.raceId}\u0000${b.id}`);
-        if (!entry?.id || !entry.boat_id) return null;
-        const amend = buildAmendContext(
-          meta.groupId,
-          meta.seriesId,
-          meta.raceId,
-          meta.name,
-          entry,
-          boatsForAmend,
-        );
-        return { boatId: b.id, boatLabel: b.label, ctx: amend.ctx, crewEditable: amend.crewEditable };
-      })
-      .filter((x): x is NonNullable<typeof x> => x != null);
+    const fleetOffsets = tallyBoatRows.map((r) => r.fleetOffsetMinutes);
+    const minFleetOff = fleetOffsets.length ? Math.min(...fleetOffsets) : 0;
+    const firstStartMs = fleetStartUtcMs(meta.scheduledAt, minFleetOff);
+    const firstStartDisplay = formatClubHmFromIso(new Date(firstStartMs).toISOString(), homeTz);
 
     return {
       ...meta,
       signupBoats,
       tallyBoatRows,
-      boatAmends,
-      fleetStartMsHeader,
-      earliestFleetStartDisplay,
       homeTz,
+      firstStartDisplay,
     };
   });
 
   return (
-    <div className="flex flex-1 flex-col bg-zinc-50 px-4 py-12 dark:bg-zinc-950">
-      <main className="mx-auto flex w-full max-w-2xl flex-col gap-8">
+    <div className="flex flex-1 flex-col bg-splice-surface px-4 py-12 dark:bg-splice-navy">
+      <main className="mx-auto flex w-full max-w-4xl flex-col gap-8">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">Home</h1>
-          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-            Tally targets races scheduled today in each club&apos;s local calendar date. Recent finishes appear below
-            regardless of day — series signups stay on{" "}
-            <Link href="/groups" className="font-medium text-blue-600 dark:text-blue-400">
+          <h1 className="text-2xl font-semibold tracking-tight text-splice-navy dark:text-splice-surface">Home</h1>
+          <p className="mt-2 text-sm text-splice-ocean dark:text-splice-water">
+            Today&apos;s tally is first; latest race results follow. Series signups stay on{" "}
+            <Link href="/groups" className="font-medium text-splice-blue dark:text-splice-water">
               My Entries
             </Link>
             .
@@ -746,66 +838,42 @@ export async function HomeDashboard({
           </p>
         ) : null}
 
-        <section className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-            Today&apos;s races (tally)
+        <HomeTrackNotificationsBanner items={trackNotifications} />
+
+        <section className="rounded-xl border border-splice-sky bg-white p-6 dark:border-splice-navy-light dark:bg-splice-navy">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-splice-blue dark:text-splice-water">
+            Today&apos;s tally board
           </h2>
-          <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-            Only fixtures with a start time falling on{" "}
-            <span className="font-medium text-zinc-700 dark:text-zinc-300">today&apos;s calendar date</span> in that
-            club&apos;s timezone appear here — afloat tally closes when your fleet starts; ashore stays open afterward.
-          </p>
           {featuredForHome.length ? (
             <div className="mt-4 space-y-10">
               {featuredForHome.map((fr) => (
                 <div
                   key={fr.raceId}
-                  className="border-t border-zinc-100 pt-8 first:mt-3 first:border-none first:pt-0 dark:border-zinc-800"
+                  className="border-t border-splice-foam pt-8 first:mt-3 first:border-none first:pt-0 dark:border-splice-navy-light"
                 >
                   <div className="text-sm">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium text-zinc-900 dark:text-zinc-50">{fr.name}</p>
-                        <p className="text-zinc-600 dark:text-zinc-400">
-                          {fr.seriesName}
-                          {fr.clubName ? ` · ${fr.clubName}` : null}
-                        </p>
-                        <p className="mt-1 text-xs tabular-nums text-zinc-500">
-                          {formatClubDdMmmYyyyFromIso(fr.scheduledAt, fr.homeTz)} · Start{" "}
-                          {formatClubHmFromIso(fr.scheduledAt, fr.homeTz)}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-end justify-end gap-2">
-                        {fr.boatAmends.map((a) => (
-                          <div key={a.boatId} className="flex flex-col items-end gap-0.5">
-                            {fr.signupBoats.length > 1 ? (
-                              <span className="max-w-[10rem] truncate text-[10px] font-medium uppercase tracking-wide text-zinc-400">
-                                {a.boatLabel}
-                              </span>
-                            ) : null}
-                            <HomeAmendRaceDetailsButton ctx={a.ctx} crewEditable={a.crewEditable} />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                    <p className="text-splice-ocean tabular-nums dark:text-splice-water">
+                      {[fr.clubName, fr.seriesName, fr.name]
+                        .filter((part): part is string => !!part?.trim())
+                        .join(" · ")}
+                      {" · "}
+                      {formatClubDdMmmYyyyFromIso(fr.scheduledAt, fr.homeTz)}
+                      {" · First start "}
+                      {fr.firstStartDisplay}
+                    </p>
 
                     {fr.signupBoats.length === 0 ? (
                       <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:bg-amber-950/40 dark:text-amber-100">
                         Add at least one boat to this series signup on{" "}
                         <Link
-                          href={`/groups/${fr.groupId}/series-entries`}
-                          className="font-medium text-blue-700 underline dark:text-blue-300"
+                          href={`/groups#club-${fr.groupId}`}
+                          className="font-medium text-splice-ocean underline dark:text-splice-sky"
                         >
-                          Series entries
+                          Series schedule
                         </Link>{" "}
                         for this club before tally or crew details will work for this race.
                       </p>
-                    ) : (
-                      <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-                        Tally afloat independently for each boat on your series signup. Undo only affects that dinghy&apos;s
-                        row.
-                      </p>
-                    )}
+                    ) : null}
 
                     <HomeNextRaceTallyPanel
                       groupId={fr.groupId}
@@ -813,81 +881,42 @@ export async function HomeDashboard({
                       raceId={fr.raceId}
                       scheduledAtIso={fr.scheduledAt}
                       nowMs={homeRenderNowMs}
-                      earliestFleetStartDisplay={fr.earliestFleetStartDisplay}
                       boatRows={fr.tallyBoatRows}
                     />
-                    <Link
-                      href={`/groups/${fr.groupId}/series/${fr.seriesId}/races/${fr.raceId}`}
-                      className="mt-4 inline-block text-xs font-medium text-blue-600 dark:text-blue-400"
-                    >
-                      Open race →
-                    </Link>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
+            <p className="mt-3 text-sm text-splice-ocean dark:text-splice-water">
               {seriesIds.length
-                ? "No races scheduled for today at your clubs are in tally focus right now — future fixtures stay on My Entries and race pages."
+                ? "No races scheduled for today at your clubs are in tally focus right now — future fixtures stay on My Entries."
                 : "Register for a series to see tally here on race days."}
             </p>
           )}
-        </section>
 
-        <section className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Races</h2>
-
-          <h3 className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-            Finish results (recorded)
+          <h3 className="mb-2 mt-10 text-xs font-semibold uppercase tracking-wide text-splice-blue dark:text-splice-water">
+            My latest race results
           </h3>
-          {!finishRows.length ? (
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              No recorded finish times yet. When a race officer logs your finish, it appears here.
-            </p>
+          {recentRaceResults ? (
+            <HomeRecentRaceResultsTable results={recentRaceResults} />
           ) : (
-            <div className="mt-2 overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-              <table className="w-full min-w-[640px] text-left text-sm">
-                <thead className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950">
-                  <tr>
-                    <th className="px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Race</th>
-                    <th className="px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Series / club</th>
-                    <th className="px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Sail day</th>
-                    <th className="px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Finish (club)</th>
-                    <th className="px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300 w-36">Details</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                  {finishRows.map((r, i) => {
-                    const amend = buildAmendContext(r.groupId, r.seriesId, r.raceId, r.raceName, r.entry, boatsForAmend);
-                    const rowTz = clubTzByGroupId.get(r.groupId) ?? resolveClubIanaTimeZone(null);
-                    return (
-                      <tr key={`${r.raceId}-${i}`}>
-                        <td className="px-3 py-2 text-zinc-900 dark:text-zinc-100">{r.raceName}</td>
-                        <td className="px-3 py-2 text-zinc-600 dark:text-zinc-400">
-                          <span className="text-zinc-800 dark:text-zinc-200">{r.seriesName ?? "—"}</span>
-                          {r.clubName ? (
-                            <>
-                              {" "}
-                              <span className="text-zinc-500">· {r.clubName}</span>
-                            </>
-                          ) : null}
-                        </td>
-                        <td className="px-3 py-2 tabular-nums text-zinc-600 dark:text-zinc-400">
-                          {formatClubDateMedium(r.scheduledAt, rowTz)}
-                        </td>
-                        <td className="px-3 py-2 tabular-nums text-zinc-800 dark:text-zinc-200">
-                          {formatClubDdMmmYyyyHmsFromIso(r.officialFinishAt, rowTz)}
-                        </td>
-                        <td className="px-3 py-2">
-                          <HomeAmendRaceDetailsButton ctx={amend.ctx} crewEditable={amend.crewEditable} />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <p className="text-sm text-splice-ocean dark:text-splice-water">
+              No recorded race finishes in your series yet. When a race officer logs finishes, the latest race ranking
+              appears here.
+            </p>
+          )}
+
+          <h3 className="mb-2 mt-10 text-xs font-semibold uppercase tracking-wide text-splice-blue dark:text-splice-water">
+            My boat race results
+          </h3>
+          {boatRaceResults.length > 0 ? (
+            <HomeBoatRaceResultsTable groups={boatRaceResults} />
+          ) : (
+            <p className="text-sm text-splice-ocean dark:text-splice-water">
+              No boat results in your series yet. When a boat on your series signup has recorded race finishes, each
+              race appears here grouped by series.
+            </p>
           )}
         </section>
       </main>

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { formatClubDdMmmYyyyHmsFromIso } from "@/lib/club-display-format";
+import { formatClubDdMmmHmFromIso } from "@/lib/club-display-format";
 
 const DEFAULT_MAX_RACE_DURATION_MS = 4 * 60 * 60 * 1000;
 const DEFAULT_CLUB_TIMEZONE = "Europe/London";
@@ -9,6 +9,7 @@ export type RaceMatchCandidate = {
   seriesId: string;
   groupId: string;
   groupName: string;
+  seriesName: string;
   raceName: string;
   scheduledAt: string;
   scheduledAtLabel: string;
@@ -24,6 +25,7 @@ type RaceRow = {
   series_id: string;
   series: {
     id: string;
+    name: string;
     group_id: string;
     tally_open_hours_before_fleet_start: number | null;
     groups: { id: string; name: string; iana_timezone?: string | null } | { id: string; name: string; iana_timezone?: string | null }[] | null;
@@ -54,7 +56,7 @@ export function rankRaceCandidates(
   trackEndMs: number,
   races: RaceRow[],
   entryRaceIds: Set<string>,
-  boatsByRaceId: Map<string, RaceMatchCandidate["boats"]>,
+  boatsBySeriesId: Map<string, RaceMatchCandidate["boats"]>,
 ): RaceMatchCandidate[] {
   const out: RaceMatchCandidate[] = [];
 
@@ -86,15 +88,16 @@ export function rankRaceCandidates(
       seriesId: series.id,
       groupId: series.group_id,
       groupName: group.name,
+      seriesName: series.name,
       raceName: race.name,
       scheduledAt: race.scheduled_at,
-      scheduledAtLabel: formatClubDdMmmYyyyHmsFromIso(
+      scheduledAtLabel: formatClubDdMmmHmFromIso(
         race.scheduled_at,
         group.iana_timezone?.trim() || DEFAULT_CLUB_TIMEZONE,
       ),
       score,
       hasEntry,
-      boats: boatsByRaceId.get(race.id) ?? [],
+      boats: boatsBySeriesId.get(series.id) ?? [],
     });
   }
 
@@ -129,41 +132,53 @@ export async function loadRaceMatchCandidates(
   const { data: racesRaw } = await supabase
     .from("races")
     .select(
-      "id, name, scheduled_at, series_id, series:series_id(id, group_id, tally_open_hours_before_fleet_start, groups:group_id(id, name, iana_timezone))",
+      "id, name, scheduled_at, series_id, series:series_id(id, name, group_id, tally_open_hours_before_fleet_start, groups:group_id(id, name, iana_timezone))",
     )
     .in("series_id", seriesIds)
     .gte("scheduled_at", searchStart)
     .lte("scheduled_at", searchEnd);
 
   const races = (racesRaw ?? []) as unknown as RaceRow[];
-  const raceIds = races.map((r) => r.id);
-  if (raceIds.length === 0) return [];
+  const seriesIdsForRaces = [...new Set(races.map((r) => r.series_id))];
+  if (races.length === 0) return [];
 
-  const { data: entries } = await supabase
-    .from("race_entries")
-    .select("race_id, boat_id, boats(id, label, default_sail_number)")
-    .eq("user_id", userId)
-    .in("race_id", raceIds);
+  const [{ data: entries }, { data: seriesBoats }] = await Promise.all([
+    supabase.from("race_entries").select("race_id").eq("user_id", userId).in("race_id", races.map((r) => r.id)),
+    seriesIdsForRaces.length > 0
+      ? supabase
+          .from("series_registration_boats")
+          .select("series_id, boat_id, boats(id, label, default_sail_number)")
+          .eq("user_id", userId)
+          .in("series_id", seriesIdsForRaces)
+      : Promise.resolve({
+          data: [] as {
+            series_id: string;
+            boat_id: string;
+            boats: unknown;
+          }[],
+        }),
+  ]);
 
-  const entryRaceIds = new Set<string>();
-  const boatsByRaceId = new Map<string, RaceMatchCandidate["boats"]>();
+  const entryRaceIds = new Set<string>((entries ?? []).map((e) => e.race_id));
+  const boatsBySeriesId = new Map<string, RaceMatchCandidate["boats"]>();
 
-  for (const e of entries ?? []) {
-    entryRaceIds.add(e.race_id);
+  for (const row of seriesBoats ?? []) {
     const boat = unwrapOne(
-      e.boats as
+      row.boats as
         | { id: string; label: string | null; default_sail_number: string | null }
         | { id: string; label: string | null; default_sail_number: string | null }[]
         | null,
     );
-    const list = boatsByRaceId.get(e.race_id) ?? [];
-    list.push({
-      boatId: e.boat_id,
-      label: boat?.label ?? null,
-      sailNumber: boat?.default_sail_number ?? null,
-    });
-    boatsByRaceId.set(e.race_id, list);
+    const list = boatsBySeriesId.get(row.series_id) ?? [];
+    if (!list.some((b) => b.boatId === row.boat_id)) {
+      list.push({
+        boatId: row.boat_id,
+        label: boat?.label ?? null,
+        sailNumber: boat?.default_sail_number ?? null,
+      });
+    }
+    boatsBySeriesId.set(row.series_id, list);
   }
 
-  return rankRaceCandidates(trackStartMs, trackEndMs, races, entryRaceIds, boatsByRaceId);
+  return rankRaceCandidates(trackStartMs, trackEndMs, races, entryRaceIds, boatsBySeriesId);
 }

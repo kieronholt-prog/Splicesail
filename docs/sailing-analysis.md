@@ -21,7 +21,7 @@ Set in `.env.local` (and production host env):
 
 - `STRAVA_CLIENT_ID` — from [strava.com/settings/api](https://www.strava.com/settings/api)
 - `STRAVA_CLIENT_SECRET` — same secret as the Sailstats Worker (dashboard → **Encrypt**, not in git)
-- `NEXT_PUBLIC_APP_URL` — e.g. `http://localhost:3000` locally; Splice callback is `{NEXT_PUBLIC_APP_URL}/api/strava/callback`
+- `NEXT_PUBLIC_APP_URL` — local: `http://localhost:3000`; production defaults to **`https://splicesail.com`**. Strava callback: `{origin}/api/strava/callback`
 
 Strava allows `localhost` redirect URIs alongside the Sailstats GitHub Pages domain, so local Splice dev can share the app. For **production** Splice on a new domain, you may need to change the app’s **Authorization Callback Domain** on Strava (one domain per app) or accept using localhost-only until then.
 

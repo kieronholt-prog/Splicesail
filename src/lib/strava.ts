@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { configuredAppOrigin } from "@/lib/app-url";
 
 export type StravaConnection = {
   user_id: string;
@@ -13,7 +14,7 @@ export type StravaConnection = {
 export function stravaConfig() {
   const clientId = process.env.STRAVA_CLIENT_ID;
   const clientSecret = process.env.STRAVA_CLIENT_SECRET;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const appUrl = configuredAppOrigin();
   if (!clientId || !clientSecret) {
     throw new Error("Missing STRAVA_CLIENT_ID or STRAVA_CLIENT_SECRET");
   }
@@ -112,8 +113,29 @@ export type StravaActivitySummary = {
 
 export type StravaStream = {
   type: string;
-  data: number[];
+  data: unknown[];
 };
+
+export type StravaStreamsByType = {
+  latlng?: { data: [number, number][] };
+  time?: { data: number[] };
+};
+
+function parseStravaLatLngTimeStreams(
+  payload: StravaStream[] | StravaStreamsByType,
+): { latlng: [number, number][]; time: number[] } | null {
+  if (Array.isArray(payload)) {
+    const latlng = payload.find((s) => s.type === "latlng")?.data as [number, number][] | undefined;
+    const time = payload.find((s) => s.type === "time")?.data as number[] | undefined;
+    if (!latlng?.length || !time?.length) return null;
+    return { latlng, time };
+  }
+
+  const latlng = payload.latlng?.data;
+  const time = payload.time?.data;
+  if (!latlng?.length || !time?.length) return null;
+  return { latlng, time };
+}
 
 export async function fetchStravaActivities(
   conn: StravaConnection,
@@ -130,18 +152,18 @@ export async function fetchStravaTrackPoints(
   conn: StravaConnection,
   activityId: string | number,
 ): Promise<{ lat: number; lon: number; time: number }[]> {
-  const streams = await stravaApiGet<StravaStream[]>(
+  const streams = await stravaApiGet<StravaStream[] | StravaStreamsByType>(
     conn,
     `/activities/${activityId}/streams?keys=latlng,time&key_by_type=true`,
   );
-  const latlng = streams.find((s) => s.type === "latlng")?.data as [number, number][] | undefined;
-  const time = streams.find((s) => s.type === "time")?.data as number[] | undefined;
-  if (!latlng?.length || !time?.length) return [];
-  const n = Math.min(latlng.length, time.length);
+  const parsed = parseStravaLatLngTimeStreams(streams);
+  if (!parsed) return [];
+
+  const n = Math.min(parsed.latlng.length, parsed.time.length);
   const pts: { lat: number; lon: number; time: number }[] = [];
   for (let i = 0; i < n; i++) {
-    const [lat, lon] = latlng[i];
-    pts.push({ lat, lon, time: time[i] });
+    const [lat, lon] = parsed.latlng[i];
+    pts.push({ lat, lon, time: parsed.time[i] });
   }
   return pts;
 }

@@ -1,15 +1,12 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { getServerAuth } from "@/lib/supabase/auth-cache";
 import { redirect } from "next/navigation";
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export async function createGroupAction(formData: FormData) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user } = await getServerAuth();
 
   if (!user) {
     redirect("/login");

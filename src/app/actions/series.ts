@@ -1,26 +1,16 @@
 "use server";
 
+import { recordRaceCalendarTombstones } from "@/lib/calendar-event-tombstone";
 import { createClient } from "@/lib/supabase/server";
+import { getServerAuth } from "@/lib/supabase/auth-cache";
 import { redirect } from "next/navigation";
 
-function parseOptionalDate(raw: string): string | null {
-  const s = raw.trim();
-  return s.length ? s : null;
-}
-
-/** datetime-local gives `YYYY-MM-DDTHH:mm`; store as UTC for MVP (label form accordingly). */
-function datetimeLocalToUtcIso(raw: string): string | null {
-  const s = raw.trim();
-  if (!s || !s.includes("T")) return null;
-  return `${s}:00Z`;
-}
+/** Race dates and times are set on the series page (race / series generator). */
 
 export async function createSeriesAction(formData: FormData) {
   const groupId = String(formData.get("group_id") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
-  const starts_on = parseOptionalDate(String(formData.get("starts_on") ?? ""));
-  const ends_on = parseOptionalDate(String(formData.get("ends_on") ?? ""));
 
   if (!groupId) {
     redirect(
@@ -42,8 +32,8 @@ export async function createSeriesAction(formData: FormData) {
       group_id: groupId,
       name,
       description: description.length ? description : null,
-      starts_on,
-      ends_on,
+      starts_on: null,
+      ends_on: null,
     })
     .select("id")
     .single();
@@ -57,42 +47,74 @@ export async function createSeriesAction(formData: FormData) {
   redirect(`/groups/${groupId}/series/${data.id}`);
 }
 
-export async function createRaceAction(formData: FormData) {
+export async function deleteSeriesAction(formData: FormData) {
   const groupId = String(formData.get("group_id") ?? "").trim();
   const seriesId = String(formData.get("series_id") ?? "").trim();
-  const name = String(formData.get("name") ?? "").trim();
-  const scheduledRaw = String(formData.get("scheduled_at") ?? "").trim();
-
-  const scheduled_at = datetimeLocalToUtcIso(scheduledRaw);
+  const password = String(formData.get("password") ?? "");
 
   if (!groupId || !seriesId) {
-    redirect(
-      "/groups?error=" +
-        encodeURIComponent("Missing group or series — try adding the race again."),
-    );
+    redirect("/groups?error=" + encodeURIComponent("Missing club or series."));
   }
 
-  if (!name || !scheduled_at) {
-    redirect(
-      `/groups/${groupId}/series/${seriesId}?error=` +
-        encodeURIComponent(
-          "Race name and scheduled date/time are required (use a complete UTC date/time).",
-        ),
-    );
+  const { supabase, user } = await getServerAuth();
+
+  if (!user) {
+    redirect("/login");
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase.from("races").insert({
-    series_id: seriesId,
-    name,
-    scheduled_at,
-  });
-
-  if (error) {
-    redirect(
-      `/groups/${groupId}/series/${seriesId}?error=` + encodeURIComponent(error.message),
-    );
+  const email = user.email;
+  if (!email) {
+    redirect(`/groups/${groupId}?error=` + encodeURIComponent("Your account needs an email address to verify password."));
   }
 
-  redirect(`/groups/${groupId}/series/${seriesId}`);
+  const { data: membership } = await supabase
+    .from("group_memberships")
+    .select("role")
+    .eq("group_id", groupId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (membership?.role !== "club_admin") {
+    redirect(`/groups/${groupId}?error=` + encodeURIComponent("Only club admins can delete a series."));
+  }
+
+  if (!password.trim()) {
+    redirect(
+      `/groups/${groupId}?error=` +
+        encodeURIComponent("Enter your account password to confirm deleting this series."),
+    );
+  }
+  const { verifyUserPassword } = await import("@/lib/auth/verify-password");
+  const ok = await verifyUserPassword(email, password);
+  if (!ok) {
+    redirect(`/groups/${groupId}?error=` + encodeURIComponent("Password did not match."));
+  }
+
+  const [{ data: seriesRow }, { data: races }] = await Promise.all([
+    supabase.from("series").select("name").eq("id", seriesId).eq("group_id", groupId).maybeSingle(),
+    supabase.from("races").select("id, name, scheduled_at").eq("series_id", seriesId),
+  ]);
+
+  if (!seriesRow) {
+    redirect(`/groups/${groupId}?error=` + encodeURIComponent("Series not found."));
+  }
+
+  if ((races ?? []).length > 0) {
+    const tomb = await recordRaceCalendarTombstones(supabase, races ?? [], {
+      groupId,
+      seriesId,
+      seriesName: seriesRow.name,
+    });
+    if (tomb.error) {
+      redirect(`/groups/${groupId}?error=` + encodeURIComponent(tomb.error));
+    }
+  }
+
+  const { error: delErr } = await supabase.from("series").delete().eq("id", seriesId).eq("group_id", groupId);
+
+  if (delErr) {
+    redirect(`/groups/${groupId}?error=` + encodeURIComponent(delErr.message));
+  }
+
+  redirect(`/groups/${groupId}?series_deleted=1`);
 }

@@ -21,7 +21,15 @@ export {
   customCourseMarkRowsFromRecipe,
   normalizeCustomCourseRecipe,
   buildOneSidedGateFC,
+  buildMarkGateDebugFC,
+  buildTrackSegmentFeatureCollection,
+  buildAllTacksVmgOverlayData,
+  mapboxTrackLineColorByKindExpr,
+  manoeuvreBadgeBaseColor,
   courseGeometrySignature,
+  TRACK_LEG_SEGMENT_PALETTE,
+  TRACK_LEG_SKIP_COLOR,
+  MAP_RND_BISECTOR_LINE,
 } from "./engine-core";
 
 export * from "./types";

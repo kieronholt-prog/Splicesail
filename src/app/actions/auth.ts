@@ -1,14 +1,21 @@
 "use server";
 
+import { appOrigin } from "@/lib/app-origin";
 import { createClient } from "@/lib/supabase/server";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-async function requestOrigin(): Promise<string> {
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
-  const proto = h.get("x-forwarded-proto") ?? "http";
-  return `${proto}://${host}`;
+async function postAuthRedirect(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return "/login";
+  const { data: prof } = await supabase
+    .from("profiles")
+    .select("has_finished_account_intro")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (!prof?.has_finished_account_intro) return "/account";
+  return "/";
 }
 
 export async function loginAction(formData: FormData) {
@@ -26,7 +33,7 @@ export async function loginAction(formData: FormData) {
     redirect("/login?error=" + encodeURIComponent(error.message));
   }
 
-  redirect("/account");
+  redirect(await postAuthRedirect(supabase));
 }
 
 export async function signupAction(formData: FormData) {
@@ -43,14 +50,14 @@ export async function signupAction(formData: FormData) {
   }
 
   const supabase = await createClient();
-  const origin = await requestOrigin();
+  const origin = await appOrigin();
 
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
       data: displayName ? { display_name: displayName } : undefined,
-      emailRedirectTo: `${origin}/account`,
+      emailRedirectTo: `${origin}/`,
     },
   });
 
@@ -59,7 +66,7 @@ export async function signupAction(formData: FormData) {
   }
 
   if (data.session) {
-    redirect("/account");
+    redirect(await postAuthRedirect(supabase));
   }
 
   redirect(

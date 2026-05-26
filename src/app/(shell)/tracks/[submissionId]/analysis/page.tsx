@@ -1,22 +1,32 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import {
-  AnalysisLegsTable,
-  AnalysisResultsSummary,
-} from "@/components/sailing-analysis/analysis-results-summary";
+import { AnalysisInteractive } from "@/components/sailing-analysis/analysis-interactive";
+import { buildCourseLinePoints, buildMapMarksWithSfEnds } from "@/lib/sailing-analysis/map-display";
+import { buildGateOverlayFC, sfLineFromCourseSetup } from "@/lib/sailing-analysis/gate-overlay";
+import { loadTrackPointsForSubmission } from "@/lib/track-points-loader";
+import { resolveCollatedCourseContext } from "@/lib/sailing-analysis/resolve-collated-course-context";
+import type { AnalysisSnapshot } from "@/lib/sailing-analysis/analysis-types";
 import { getServerAuth } from "@/lib/supabase/auth-cache";
 import { dismissTrackNotificationAction } from "@/app/actions/track-submissions";
 
-type Props = { params: Promise<{ submissionId: string }> };
+type Props = {
+  params: Promise<{ submissionId: string }>;
+  searchParams: Promise<{ error?: string; rerun?: string }>;
+};
 
-export default async function TrackAnalysisPage({ params }: Props) {
+export default async function TrackAnalysisPage({ params, searchParams }: Props) {
   const { submissionId } = await params;
+  const q = await searchParams;
+  const error = q.error ? decodeURIComponent(q.error) : null;
+
   const { supabase, user } = await getServerAuth();
   if (!user) redirect("/login");
 
   const { data: sub } = await supabase
     .from("race_track_submissions")
-    .select("id, activity_name, status, analysis_mode, race_id, group_id")
+    .select(
+      "id, activity_name, status, analysis_mode, race_id, group_id, course_letter, laps, mark_overrides, course_setup, det_settings, track_source, external_activity_id, storage_path",
+    )
     .eq("id", submissionId)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -32,8 +42,25 @@ export default async function TrackAnalysisPage({ params }: Props) {
   if (!analysis) notFound();
 
   const stats = (analysis.stats ?? {}) as Record<string, unknown>;
-  const snapshot = analysis.analysis_snapshot as { legs?: Record<string, unknown>[] } | null;
-  const legs = (snapshot?.legs ?? analysis.leg_summary ?? []) as Record<string, unknown>[];
+  const snapshot = (analysis.analysis_snapshot ?? {}) as AnalysisSnapshot;
+
+  const courseCtx = await resolveCollatedCourseContext(supabase, sub);
+
+  const [{ data: clubMarks }, { data: course }, trackPoints] = await Promise.all([
+    supabase.from("group_sailing_marks").select("*").eq("group_id", sub.group_id).order("sort_order"),
+    courseCtx.courseLetter
+      ? supabase
+          .from("group_sailing_courses")
+          .select("*")
+          .eq("group_id", sub.group_id)
+          .eq("course_letter", courseCtx.courseLetter)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    loadTrackPointsForSubmission(supabase, user.id, sub),
+  ]);
+
+  const markOverrides = courseCtx.markOverrides;
+  const courseSetup = courseCtx.courseSetup;
 
   let collatedPeers: { id: string; activity_name: string | null }[] = [];
   if (sub.analysis_mode === "collated" && sub.race_id) {
@@ -50,7 +77,7 @@ export default async function TrackAnalysisPage({ params }: Props) {
 
   return (
     <div className="flex flex-1 flex-col bg-splice-surface px-4 py-12 dark:bg-splice-navy">
-      <main className="mx-auto w-full max-w-3xl rounded-xl border border-splice-sky bg-white p-8 shadow-sm dark:border-splice-navy-light dark:bg-splice-navy">
+      <main className="mx-auto w-full max-w-5xl rounded-xl border border-splice-sky bg-white p-8 shadow-sm dark:border-splice-navy-light dark:bg-splice-navy">
         <Link href="/tracks" className="text-sm text-splice-blue underline dark:text-splice-sky">
           ← Tracks
         </Link>
@@ -66,16 +93,29 @@ export default async function TrackAnalysisPage({ params }: Props) {
           <p className="mt-1 text-sm text-splice-ocean dark:text-splice-water">Standalone analysis</p>
         )}
 
-        <div className="mt-8">
-          <AnalysisResultsSummary stats={stats} windDirection={analysis.wind_direction} />
-        </div>
+        {error ? (
+          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
+        ) : null}
+        {q.rerun === "1" ? (
+          <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+            Analysis updated with your mark adjustments.
+          </p>
+        ) : null}
 
-        <section className="mt-10">
-          <h2 className="text-lg font-medium">Legs</h2>
-          <div className="mt-4">
-            <AnalysisLegsTable legs={legs} />
-          </div>
-        </section>
+        <div className="mt-8">
+          <AnalysisInteractive
+            submissionId={submissionId}
+            snapshot={snapshot}
+            stats={stats}
+            windDirection={analysis.wind_direction}
+            clubMarks={clubMarks ?? []}
+            course={course}
+            laps={courseCtx.laps}
+            initialMarkOverrides={markOverrides}
+            initialCourseSetup={courseSetup}
+            trackPoints={trackPoints}
+          />
+        </div>
 
         {collatedPeers.length > 0 ? (
           <section className="mt-10">

@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import type { RaceMatchCandidate } from "@/lib/track-race-matching";
+import {
+  spliceFieldClass,
+  spliceFieldLabelClass,
+} from "@/components/sailing-analysis/form-field-classes";
 import { confirmRaceBoatAction } from "@/app/actions/track-submissions";
 
 export function RaceBoatConfirmForm({
@@ -21,8 +25,8 @@ export function RaceBoatConfirmForm({
     <form action={confirmRaceBoatAction} className="flex flex-col gap-4">
       <input type="hidden" name="submission_id" value={submissionId} />
 
-      <label className="flex flex-col gap-1 text-sm font-medium">
-        Race
+      <label className="flex flex-col gap-1">
+        <span className={spliceFieldLabelClass}>Race</span>
         <select
           name="race_id"
           value={raceId}
@@ -31,25 +35,25 @@ export function RaceBoatConfirmForm({
             const c = candidates.find((x) => x.raceId === e.target.value);
             setBoatId(c?.boats[0]?.boatId ?? "");
           }}
-          className="rounded-lg border border-splice-water px-3 py-2 dark:border-splice-ocean dark:bg-splice-navy"
+          className={spliceFieldClass}
           required
         >
           {candidates.map((c) => (
             <option key={c.raceId} value={c.raceId}>
-              {c.groupName} — {c.raceName} ({c.scheduledAtLabel})
-              {c.hasEntry ? " · entered" : ""}
+              {c.seriesName} — {c.raceName} · {c.scheduledAtLabel}
+              {c.hasEntry ? " · tallied" : ""}
             </option>
           ))}
         </select>
       </label>
 
-      <label className="flex flex-col gap-1 text-sm font-medium">
-        Boat
+      <label className="flex flex-col gap-1">
+        <span className={spliceFieldLabelClass}>Boat</span>
         <select
           name="boat_id"
           value={boatId}
           onChange={(e) => setBoatId(e.target.value)}
-          className="rounded-lg border border-splice-water px-3 py-2 dark:border-splice-ocean dark:bg-splice-navy"
+          className={spliceFieldClass}
           required
         >
           {(selected?.boats ?? []).map((b) => (
@@ -62,13 +66,15 @@ export function RaceBoatConfirmForm({
 
       {selected && selected.boats.length === 0 ? (
         <p className="text-sm text-amber-700 dark:text-amber-300">
-          No race entry found for this race — tally for the race first or pick another race.
+          No boats on your series entry for this race — add a boat on series entries first, or pick another
+          race.
         </p>
       ) : null}
 
       <button
         type="submit"
-        className="rounded-lg bg-splice-navy px-4 py-2.5 text-sm font-medium text-white dark:bg-splice-foam dark:text-splice-navy"
+        disabled={!selected?.boats.length}
+        className="rounded-lg bg-splice-navy px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-splice-foam dark:text-splice-navy"
       >
         Confirm race and boat
       </button>

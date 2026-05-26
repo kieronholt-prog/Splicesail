@@ -48,7 +48,13 @@ function StatCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function AnalysisLegsTable({ legs }: { legs: Record<string, unknown>[] }) {
+export function AnalysisLegsTable({
+  legs,
+  detailed = false,
+}: {
+  legs: Record<string, unknown>[];
+  detailed?: boolean;
+}) {
   if (!legs?.length) {
     return <p className="text-sm text-splice-ocean">No legs detected — check course marks and rounding.</p>;
   }
@@ -58,10 +64,18 @@ export function AnalysisLegsTable({ legs }: { legs: Record<string, unknown>[] })
       <table className="min-w-full text-left text-sm">
         <thead>
           <tr className="border-b border-splice-sky dark:border-splice-ocean">
-            <th className="py-2 pr-4">Leg</th>
+            <th className="py-2 pr-4">#</th>
             <th className="py-2 pr-4">From → To</th>
             <th className="py-2 pr-4">Type</th>
-            <th className="py-2">Avg VMG</th>
+            {detailed ? (
+              <>
+                <th className="py-2 pr-4">Dist</th>
+                <th className="py-2 pr-4">Avg spd</th>
+                <th className="py-2 pr-4">VMC</th>
+              </>
+            ) : null}
+            <th className="py-2">VMG</th>
+            {detailed ? <th className="py-2 pl-4">Eff %</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -71,16 +85,34 @@ export function AnalysisLegsTable({ legs }: { legs: Record<string, unknown>[] })
               <td className="py-2 pr-4">
                 {String(l.from ?? "—")} → {String(l.to ?? "—")}
               </td>
-              <td className="py-2 pr-4">{String(l.type ?? "—")}</td>
-              <td className="py-2">
-                {l.avgVmgToWind != null && Number.isFinite(Number(l.avgVmgToWind))
-                  ? `${Number(l.avgVmgToWind).toFixed(1)} kts`
-                  : "—"}
-              </td>
+              <td className="py-2 pr-4 capitalize">{String(l.type ?? "—")}</td>
+              {detailed ? (
+                <>
+                  <td className="py-2 pr-4">
+                    {l.distance != null ? `${(Number(l.distance) / 1852).toFixed(2)} nm` : "—"}
+                  </td>
+                  <td className="py-2 pr-4">
+                    {fmtKts(l.avgSpeed)}
+                  </td>
+                  <td className="py-2 pr-4">{fmtKts(l.avgVmc)}</td>
+                </>
+              ) : null}
+              <td className="py-2">{fmtKts(l.avgVmgToWind ?? l.avgVMG)}</td>
+              {detailed ? (
+                <td className="py-2 pl-4">
+                  {l.efficiency != null && Number.isFinite(Number(l.efficiency))
+                    ? `${Math.round(Number(l.efficiency))}%`
+                    : "—"}
+                </td>
+              ) : null}
             </tr>
           ))}
         </tbody>
       </table>
     </div>
   );
+}
+
+function fmtKts(v: unknown) {
+  return v != null && Number.isFinite(Number(v)) ? `${Number(v).toFixed(1)} kts` : "—";
 }

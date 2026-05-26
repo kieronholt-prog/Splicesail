@@ -4,8 +4,10 @@ import { AnalysisModeChooser } from "@/components/sailing-analysis/analysis-mode
 import { RaceBoatConfirmForm } from "@/components/sailing-analysis/race-boat-confirm-form";
 import { StandaloneCourseSetupForm } from "@/components/sailing-analysis/standalone-course-setup-form";
 import { formatClubDdMmmYyyyHmsFromIso } from "@/lib/club-display-format";
+import { loadTrackPointsForSubmission } from "@/lib/track-points-loader";
 import { loadRaceMatchCandidates } from "@/lib/track-race-matching";
 import { getServerAuth } from "@/lib/supabase/auth-cache";
+import type { MarkOverride } from "@/lib/sailing-analysis/types";
 
 type Props = {
   params: Promise<{ submissionId: string }>;
@@ -54,16 +56,31 @@ export default async function TrackSubmissionPage({ params, searchParams }: Prop
     .eq("group_id", sub.group_id)
     .order("sort_order");
 
+  const { data: clubMarks } = await supabase
+    .from("group_sailing_marks")
+    .select("*")
+    .eq("group_id", sub.group_id)
+    .order("sort_order");
+
+  const trackPoints =
+    effectiveStep === "setup"
+      ? await loadTrackPointsForSubmission(supabase, user.id, sub)
+      : [];
+
+  const setupWide = effectiveStep === "setup";
+
   return (
     <div className="flex flex-1 flex-col bg-splice-surface px-4 py-12 dark:bg-splice-navy">
-      <main className="mx-auto w-full max-w-2xl rounded-xl border border-splice-sky bg-white p-8 shadow-sm dark:border-splice-navy-light dark:bg-splice-navy">
-        <Link href="/tracks" className="text-sm text-splice-blue underline dark:text-splice-sky">
+      <main
+        className={`mx-auto w-full rounded-xl border border-splice-sky bg-white p-8 shadow-sm dark:border-splice-navy-light dark:bg-splice-navy ${setupWide ? "max-w-4xl" : "max-w-2xl"}`}
+      >
+        <Link href="/tracks" className="text-sm text-splice-ocean underline dark:text-splice-sky">
           ← Tracks
         </Link>
         <h1 className="mt-4 text-xl font-semibold text-splice-navy dark:text-splice-foam">
           {sub.activity_name ?? "Track submission"}
         </h1>
-        <p className="mt-1 text-sm text-splice-ocean dark:text-splice-water">
+        <p className="mt-1 text-sm text-splice-navy-light dark:text-splice-water">
           {formatClubDdMmmYyyyHmsFromIso(sub.activity_started_at, "Europe/London")}
         </p>
 
@@ -76,8 +93,8 @@ export default async function TrackSubmissionPage({ params, searchParams }: Prop
         <div className="mt-8">
           {effectiveStep === "confirm" ? (
             <>
-              <h2 className="text-lg font-medium">Confirm race and boat</h2>
-              <p className="mt-2 text-sm text-splice-ocean dark:text-splice-water">
+              <h2 className="text-lg font-medium text-splice-navy dark:text-splice-foam">Confirm race and boat</h2>
+              <p className="mt-2 text-sm text-splice-navy-light dark:text-splice-water">
                 We matched your track time to the races below. Confirm which race you sailed and which boat you were
                 on.
               </p>
@@ -111,8 +128,12 @@ export default async function TrackSubmissionPage({ params, searchParams }: Prop
                 <StandaloneCourseSetupForm
                   submissionId={submissionId}
                   courses={courses ?? []}
+                  clubMarks={clubMarks ?? []}
+                  trackPoints={trackPoints}
                   defaultCourseLetter={sub.course_letter}
                   defaultLaps={sub.laps}
+                  defaultCourseSetup={(sub.course_setup ?? null) as Record<string, unknown> | null}
+                  defaultMarkOverrides={(sub.mark_overrides ?? null) as Record<string, MarkOverride> | null}
                 />
               </div>
             </>

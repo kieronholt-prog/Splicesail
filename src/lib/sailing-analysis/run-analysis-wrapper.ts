@@ -26,7 +26,7 @@ export type AnalysisRunInput = {
 };
 
 export function executeAnalysis(input: AnalysisRunInput) {
-  const courseSetup = input.courseSetup ?? {};
+  let courseSetup = { ...(input.courseSetup ?? {}) };
   const cropStartSec = Number(courseSetup.cropStartSec ?? 0);
   const cropDurationSec = Number(courseSetup.cropDurationSec ?? 0);
   let pts = input.points;
@@ -34,6 +34,15 @@ export function executeAnalysis(input: AnalysisRunInput) {
     pts = cropTrackPoints(pts, cropStartSec, cropDurationSec);
   }
   if (!pts || pts.length < 20) return null;
+
+  const firstT = pts[0]?.time;
+  const raceStartUnix = courseSetup.raceStartUnixSec;
+  if (firstT != null && raceStartUnix != null && Number.isFinite(Number(raceStartUnix))) {
+    courseSetup = {
+      ...courseSetup,
+      raceStartSec: Math.max(0, Math.round(Number(raceStartUnix) - firstT)),
+    };
+  }
 
   const { markPositions, preamble } = buildMarkPositionsFromClubData(
     input.marks,

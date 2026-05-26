@@ -1,28 +1,18 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { getServerAuth } from "@/lib/supabase/auth-cache";
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-function raceUrl(
-  groupId: string,
-  seriesId: string,
-  raceId: string,
-  qs?: string,
-) {
+function seriesDetailPath(groupId: string, seriesId: string, qs?: string) {
   const q = qs ? `?${qs}` : "";
-  return `/groups/${groupId}/series/${seriesId}/races/${raceId}${q}`;
+  return `/groups/${groupId}/series/${seriesId}${q}`;
 }
 
-function datetimeLocalToUtcIso(raw: string): string | null {
-  const s = raw.trim();
-  if (!s || !s.includes("T")) return null;
-  return `${s}:00Z`;
-}
-
-async function requireRaceStaff(
+async function requireClubAdmin(
   supabase: SupabaseClient,
   groupId: string,
+  seriesId: string,
   userId: string,
 ) {
   const { data: m } = await supabase
@@ -32,10 +22,13 @@ async function requireRaceStaff(
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (m?.role !== "club_admin" && m?.role !== "race_officer") {
+  if (m?.role !== "club_admin") {
     redirect(
-      `/groups/${groupId}?error=` +
-        encodeURIComponent("Only club admins and race officers can update race signals."),
+      seriesDetailPath(
+        groupId,
+        seriesId,
+        `error=${encodeURIComponent("Only club admins can mark results final.")}`,
+      ),
     );
   }
 }
@@ -44,30 +37,20 @@ export async function updateRaceSignalsAction(formData: FormData) {
   const groupId = String(formData.get("group_id") ?? "").trim();
   const seriesId = String(formData.get("series_id") ?? "").trim();
   const raceId = String(formData.get("race_id") ?? "").trim();
-  const rawStart = String(formData.get("start_signal_at") ?? "").trim();
   const results_final_raw = String(formData.get("results_final") ?? "").trim();
+  const nextRaw = String(formData.get("next") ?? "").trim();
 
   if (!groupId || !seriesId || !raceId) {
     redirect("/groups?error=" + encodeURIComponent("Missing race context."));
   }
 
-  const start_signal_at = rawStart.length ? datetimeLocalToUtcIso(rawStart) : null;
-  if (rawStart.length && !start_signal_at) {
-    redirect(
-      raceUrl(groupId, seriesId, raceId, `error=${encodeURIComponent("Invalid start signal datetime.")}`),
-    );
-  }
-
   const results_final = results_final_raw === "1" || results_final_raw === "true";
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user } = await getServerAuth();
 
   if (!user) redirect("/login");
 
-  await requireRaceStaff(supabase, groupId, user.id);
+  await requireClubAdmin(supabase, groupId, seriesId, user.id);
 
   const { data: race } = await supabase
     .from("races")
@@ -77,7 +60,7 @@ export async function updateRaceSignalsAction(formData: FormData) {
 
   if (!race || race.series_id !== seriesId) {
     redirect(
-      raceUrl(groupId, seriesId, raceId, `error=${encodeURIComponent("Race not found.")}`),
+      seriesDetailPath(groupId, seriesId, `error=${encodeURIComponent("Race not found.")}`),
     );
   }
 
@@ -89,20 +72,18 @@ export async function updateRaceSignalsAction(formData: FormData) {
 
   if (!series || series.group_id !== groupId) {
     redirect(
-      raceUrl(groupId, seriesId, raceId, `error=${encodeURIComponent("Race not in this club.")}`),
+      seriesDetailPath(groupId, seriesId, `error=${encodeURIComponent("Race not in this club.")}`),
     );
   }
 
-  const { error } = await supabase
-    .from("races")
-    .update({ start_signal_at, results_final })
-    .eq("id", raceId);
+  const { error } = await supabase.from("races").update({ results_final }).eq("id", raceId);
 
   if (error) {
-    redirect(
-      raceUrl(groupId, seriesId, raceId, `error=${encodeURIComponent(error.message)}`),
-    );
+    redirect(seriesDetailPath(groupId, seriesId, `error=${encodeURIComponent(error.message)}`));
   }
 
-  redirect(raceUrl(groupId, seriesId, raceId, "signals_saved=1"));
+  const seriesPath = `/groups/${groupId}/series/${seriesId}`;
+  const allowedNext = new Set([seriesPath]);
+  const dest = nextRaw.length && allowedNext.has(nextRaw) ? nextRaw : seriesPath;
+  redirect(`${dest}?signals_saved=1`);
 }

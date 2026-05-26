@@ -4,7 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getServerAuth } from "@/lib/supabase/auth-cache";
 import { loadRaceMatchCandidates } from "@/lib/track-race-matching";
-import { fetchStravaTrackPoints, getStravaConnection } from "@/lib/strava";
+import {
+  cacheSubmissionTrackPoints,
+  loadTrackPointsForSubmission,
+} from "@/lib/track-points-loader";
+import {
+  mergeRaceStartIntoCourseSetup,
+  resolveRaceStartUtcMs,
+} from "@/lib/sailing-analysis/race-start-from-schedule";
 import {
   executeAnalysis,
   parseFIT,
@@ -31,34 +38,6 @@ async function loadSubmissionOwned(submissionId: string) {
 
   if (!sub) redirect("/tracks?error=" + encodeURIComponent("Track submission not found."));
   return { supabase, user, sub };
-}
-
-async function loadTrackPointsForSubmission(
-  supabase: Awaited<ReturnType<typeof getServerAuth>>["supabase"],
-  userId: string,
-  sub: {
-    track_source: string;
-    external_activity_id: string;
-    storage_path: string | null;
-  },
-) {
-  if (sub.track_source === "strava") {
-    const conn = await getStravaConnection(supabase, userId);
-    if (!conn) throw new Error("Strava not linked.");
-    return fetchStravaTrackPoints(conn, sub.external_activity_id);
-  }
-
-  if (!sub.storage_path) throw new Error("Upload file missing.");
-
-  const { data, error } = await supabase.storage.from("race-tracks").download(sub.storage_path);
-  if (error || !data) throw new Error("Could not load uploaded track.");
-
-  const name = sub.storage_path.toLowerCase();
-  if (name.endsWith(".gpx") || name.endsWith(".xml")) {
-    return parseGPX(await data.text());
-  }
-  const buf = await data.arrayBuffer();
-  return parseFIT(buf);
 }
 
 async function loadClubSailingContext(
@@ -207,6 +186,11 @@ export async function createUploadSubmissionAction(formData: FormData) {
     redirect("/tracks/new?error=" + encodeURIComponent(error?.message ?? "Could not save submission."));
   }
 
+  await supabase.rpc("set_track_submission_points_cache", {
+    p_submission_id: sub.id,
+    p_points: timed,
+  });
+
   revalidatePath("/tracks");
   redirectTracks(sub.id, "step=confirm");
 }
@@ -230,6 +214,26 @@ export async function confirmRaceBoatAction(formData: FormData) {
   const series = Array.isArray(race?.series) ? race?.series[0] : race?.series;
   const groupId = series?.group_id ?? sub.group_id;
 
+  const seriesId = race?.series_id;
+  if (!seriesId) {
+    redirectTracks(submissionId, "error=" + encodeURIComponent("Race not found."));
+  }
+
+  const { data: seriesBoat } = await supabase
+    .from("series_registration_boats")
+    .select("boat_id")
+    .eq("series_id", seriesId)
+    .eq("user_id", sub.user_id)
+    .eq("boat_id", boatId)
+    .maybeSingle();
+
+  if (!seriesBoat) {
+    redirectTracks(
+      submissionId,
+      "error=" + encodeURIComponent("Choose a boat you entered for this series."),
+    );
+  }
+
   const { data: entry } = await supabase
     .from("race_entries")
     .select("id")
@@ -249,6 +253,12 @@ export async function confirmRaceBoatAction(formData: FormData) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", submissionId);
+
+  try {
+    await cacheSubmissionTrackPoints(supabase, sub.user_id, sub);
+  } catch {
+    /* map overlay is optional until cache succeeds */
+  }
 
   revalidatePath("/tracks");
   redirectTracks(submissionId, "step=mode");
@@ -303,6 +313,20 @@ export async function setAnalysisModeAction(formData: FormData) {
 
   const nextStatus = mode === "standalone" ? "pending_setup" : "pending_ro";
 
+  if (mode === "collated") {
+    try {
+      await cacheSubmissionTrackPoints(supabase, user.id, sub);
+    } catch {
+      /* RO can still set course without overlay */
+    }
+  } else {
+    try {
+      await cacheSubmissionTrackPoints(supabase, user.id, sub);
+    } catch {
+      /* standalone map may load live from Strava */
+    }
+  }
+
   await supabase
     .from("race_track_submissions")
     .update({
@@ -356,6 +380,9 @@ export async function saveStandaloneSetupAction(formData: FormData) {
     .eq("id", submissionId);
 
   const points = await loadTrackPointsForSubmission(supabase, user.id, sub);
+  if (points.length < 20) {
+    redirectTracks(submissionId, "error=" + encodeURIComponent("Could not load GPS track — check Strava link or re-upload."));
+  }
   const { marks, course } = await loadClubSailingContext(supabase, sub.group_id, courseLetter);
   const results = executeAnalysis({
     points,
@@ -388,6 +415,79 @@ export async function saveStandaloneSetupAction(formData: FormData) {
   redirect(`/tracks/${submissionId}/analysis`);
 }
 
+export async function rerunTrackAnalysisAction(formData: FormData) {
+  const submissionId = String(formData.get("submission_id") ?? "").trim();
+  const markOverridesRaw = String(formData.get("mark_overrides") ?? "{}");
+  const courseSetupRaw = String(formData.get("course_setup") ?? "{}");
+  const windRaw = formData.get("wind_direction");
+
+  let mark_overrides: Record<string, MarkOverride> = {};
+  let course_setup: Record<string, unknown> = {};
+  try {
+    mark_overrides = JSON.parse(markOverridesRaw);
+    course_setup = JSON.parse(courseSetupRaw);
+  } catch {
+    redirect(`/tracks/${submissionId}/analysis?error=` + encodeURIComponent("Invalid setup data."));
+  }
+
+  const userWind =
+    windRaw != null && String(windRaw).trim() !== "" && Number.isFinite(Number(windRaw))
+      ? Number(windRaw)
+      : null;
+
+  const { supabase, user, sub } = await loadSubmissionOwned(submissionId);
+
+  await supabase
+    .from("race_track_submissions")
+    .update({
+      mark_overrides,
+      course_setup,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", submissionId);
+
+  const points = await loadTrackPointsForSubmission(supabase, user.id, sub);
+  if (points.length < 20) {
+    redirect(`/tracks/${submissionId}/analysis?error=` + encodeURIComponent("Could not load GPS track."));
+  }
+
+  const { marks, course } = await loadClubSailingContext(supabase, sub.group_id, sub.course_letter);
+
+  if (sub.race_id) {
+    const raceStartUtcMs = await resolveRaceStartUtcMs(supabase, sub.race_id);
+    course_setup = mergeRaceStartIntoCourseSetup(
+      course_setup,
+      raceStartUtcMs,
+      points[0]?.time ?? null,
+    );
+  }
+
+  const results = executeAnalysis({
+    points,
+    marks,
+    course,
+    laps: sub.laps ?? 1,
+    markOverrides: mark_overrides,
+    courseSetup: course_setup,
+    detSettings: (sub.det_settings ?? DETECTION_DEFAULTS) as typeof DETECTION_DEFAULTS,
+    userWind,
+  });
+
+  if (!results) {
+    redirect(`/tracks/${submissionId}/analysis?error=` + encodeURIComponent("Analysis failed."));
+  }
+
+  const serialized = serializeAnalysisForDb(results as NonNullable<typeof results>);
+  await supabase.from("race_track_analyses").upsert(
+    { submission_id: submissionId, ...serialized, updated_at: new Date().toISOString() },
+    { onConflict: "submission_id" },
+  );
+
+  revalidatePath(`/tracks/${submissionId}/analysis`);
+  revalidatePath("/tracks");
+  redirect(`/tracks/${submissionId}/analysis?rerun=1`);
+}
+
 export async function dismissTrackNotificationAction(formData: FormData) {
   const submissionId = String(formData.get("submission_id") ?? "").trim();
   const { supabase } = await loadSubmissionOwned(submissionId);
@@ -397,6 +497,59 @@ export async function dismissTrackNotificationAction(formData: FormData) {
     .eq("id", submissionId);
   revalidatePath("/");
   revalidatePath("/tracks");
+}
+
+export async function renameTrackSubmissionAction(formData: FormData) {
+  const submissionId = String(formData.get("submission_id") ?? "").trim();
+  const activityName = String(formData.get("activity_name") ?? "").trim();
+
+  if (!activityName) {
+    redirect("/tracks?error=" + encodeURIComponent("Enter a track name."));
+  }
+  if (activityName.length > 200) {
+    redirect("/tracks?error=" + encodeURIComponent("Track name is too long (200 characters max)."));
+  }
+
+  const { supabase, sub } = await loadSubmissionOwned(submissionId);
+  if (sub.status === "cancelled") {
+    redirect("/tracks?error=" + encodeURIComponent("That track was removed."));
+  }
+
+  const { error } = await supabase
+    .from("race_track_submissions")
+    .update({ activity_name: activityName, updated_at: new Date().toISOString() })
+    .eq("id", submissionId);
+
+  if (error) {
+    redirect("/tracks?error=" + encodeURIComponent(error.message));
+  }
+
+  revalidatePath("/tracks");
+  revalidatePath(`/tracks/${submissionId}`);
+  redirect("/tracks?renamed=1");
+}
+
+export async function removeTrackSubmissionAction(formData: FormData) {
+  const submissionId = String(formData.get("submission_id") ?? "").trim();
+  const { supabase, sub } = await loadSubmissionOwned(submissionId);
+
+  if (sub.status === "cancelled") {
+    redirect("/tracks");
+  }
+
+  const { error } = await supabase
+    .from("race_track_submissions")
+    .update({ status: "cancelled", updated_at: new Date().toISOString() })
+    .eq("id", submissionId);
+
+  if (error) {
+    redirect("/tracks?error=" + encodeURIComponent(error.message));
+  }
+
+  revalidatePath("/tracks");
+  revalidatePath("/");
+  revalidatePath(`/tracks/${submissionId}`);
+  redirect("/tracks?removed=1");
 }
 
 export async function loadSubmissionMatchCandidatesAction(submissionId: string) {

@@ -3,7 +3,11 @@ import { redirect } from "next/navigation";
 import { TracksHubList } from "@/components/sailing-analysis/tracks-hub-list";
 import { getServerAuth } from "@/lib/supabase/auth-cache";
 
-export default async function TracksPage() {
+type Props = { searchParams: Promise<{ error?: string; renamed?: string; removed?: string }> };
+
+export default async function TracksPage({ searchParams }: Props) {
+  const q = await searchParams;
+  const error = q.error ? decodeURIComponent(q.error) : null;
   const { supabase, user } = await getServerAuth();
   if (!user) redirect("/login");
 
@@ -26,9 +30,26 @@ export default async function TracksPage() {
             Add track
           </Link>
         </div>
-        <p className="mt-2 text-sm text-splice-ocean dark:text-splice-water">
+        <p className="mt-2 text-sm text-splice-navy-light dark:text-splice-water">
           Upload GPS tracks or sync from Strava, then link them to a race for analysis.
         </p>
+
+        {error ? (
+          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-100">
+            {error}
+          </p>
+        ) : null}
+        {q.renamed === "1" ? (
+          <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
+            Track name updated.
+          </p>
+        ) : null}
+        {q.removed === "1" ? (
+          <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
+            Track removed.
+          </p>
+        ) : null}
+
         {(rows ?? []).some((r) => r.status === "ready") ? (
           <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
             You have analysis ready to view.

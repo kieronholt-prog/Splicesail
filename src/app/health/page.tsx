@@ -34,19 +34,19 @@ export default async function HealthPage() {
   const json = JSON.stringify(body, null, 2);
 
   return (
-    <main className="min-h-full bg-zinc-50 p-6 font-mono text-sm text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+    <main className="min-h-full bg-splice-surface p-6 font-mono text-sm text-splice-navy dark:bg-splice-navy dark:text-splice-foam">
       <h1 className="mb-4 text-lg font-semibold tracking-tight">
-        Race Manager · health
+        Splice · health
       </h1>
-      <p className="mb-4 max-w-xl text-zinc-600 dark:text-zinc-400">
+      <p className="mb-4 max-w-xl text-splice-ocean dark:text-splice-water">
         Cursor&apos;s embedded browser often looks blank for JSON-only routes.
         This page renders the same check as HTML. JSON endpoint:{" "}
-        <a className="text-blue-600 underline dark:text-blue-400" href="/api/health">
+        <a className="text-splice-blue underline dark:text-splice-water" href="/api/health">
           /api/health
         </a>
-        . Use lowercase <code className="rounded bg-zinc-200 px-1 dark:bg-zinc-800">/health</code>.
+        . Use lowercase <code className="rounded bg-splice-sky px-1 dark:bg-splice-navy-light">/health</code>.
       </p>
-      <pre className="overflow-x-auto rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <pre className="overflow-x-auto rounded-lg border border-splice-sky bg-white p-4 shadow-sm dark:border-splice-navy-light dark:bg-splice-navy">
         {json}
       </pre>
     </main>
