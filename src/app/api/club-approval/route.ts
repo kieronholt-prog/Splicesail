@@ -80,7 +80,7 @@ export async function GET(request: Request) {
     });
   }
 
-  if (group.approval_status === "approved" && nextStatus === "reject") {
+  if (group.approval_status === "approved" && nextStatus === "rejected") {
     return new NextResponse(
       htmlPage(
         "Cannot reject",
