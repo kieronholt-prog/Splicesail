@@ -53,7 +53,7 @@ export function SeriesCalendarSubscribePanel({
       fd.set("group_id", groupId);
       fd.set("series_id", seriesId);
       const res = await revokeSeriesCalendarFeedAction(fd);
-      if (res?.error) {
+      if (res && "error" in res) {
         setRevokeError(res.error);
       } else {
         window.location.reload();
