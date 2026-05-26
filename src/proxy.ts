@@ -1,7 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
+import { underDevelopmentGate } from "@/lib/under-development";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function proxy(request: NextRequest) {
+  const gated = underDevelopmentGate(request);
+  if (gated) return gated;
+
   let supabaseResponse = NextResponse.next({
     request,
   });

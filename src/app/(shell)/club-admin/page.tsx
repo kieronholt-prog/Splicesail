@@ -22,7 +22,8 @@ export default async function ClubAdminHubPage({ searchParams }: Props) {
       groups (
         id,
         name,
-        slug
+        slug,
+        approval_status
       )
     `,
     )
@@ -30,7 +31,7 @@ export default async function ClubAdminHubPage({ searchParams }: Props) {
     .eq("role", "club_admin")
     .order("created_at", { ascending: false });
 
-  type ClubMini = { id: string; name: string; slug: string | null };
+  type ClubMini = { id: string; name: string; slug: string | null; approval_status?: string | null };
   const clubs: ClubMini[] = (rows ?? [])
     .map((row) => {
       const raw = row.groups;
@@ -38,7 +39,7 @@ export default async function ClubAdminHubPage({ searchParams }: Props) {
       if (!g || typeof g !== "object") return null;
       return g as ClubMini;
     })
-    .filter((g): g is ClubMini => g != null);
+    .filter((g): g is ClubMini => g != null && (g.approval_status ?? "approved") === "approved");
 
   if (!membershipsFetchError && clubs.length === 1) {
     const notice = actionError ? `?error=${encodeURIComponent(actionError)}` : "";

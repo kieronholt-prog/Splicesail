@@ -24,8 +24,6 @@ export default async function Home({ searchParams }: Props) {
         userId={user.id}
         homeQuery={{
           error: errorDecoded ?? undefined,
-          tallyAfloat: q.afloat === "1",
-          tallyAshore: q.ashore === "1",
           detailsSaved: q.details_saved === "1",
           outcomeSaved: q.outcome_saved === "1",
         }}

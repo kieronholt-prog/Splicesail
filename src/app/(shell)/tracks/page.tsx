@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { HomeTrackNotificationsBanner } from "@/components/sailing-analysis/home-track-notifications-banner";
 import { TracksHubList } from "@/components/sailing-analysis/tracks-hub-list";
+import { fetchHomeTrackNotifications } from "@/lib/home-track-notifications";
 import { getServerAuth } from "@/lib/supabase/auth-cache";
 
 type Props = { searchParams: Promise<{ error?: string; renamed?: string; removed?: string }> };
@@ -11,12 +13,15 @@ export default async function TracksPage({ searchParams }: Props) {
   const { supabase, user } = await getServerAuth();
   if (!user) redirect("/login");
 
-  const { data: rows } = await supabase
-    .from("race_track_submissions")
-    .select("id, activity_name, activity_started_at, status, analysis_mode, race_id")
-    .eq("user_id", user.id)
-    .neq("status", "cancelled")
-    .order("activity_started_at", { ascending: false });
+  const [{ data: rows }, trackNotifications] = await Promise.all([
+    supabase
+      .from("race_track_submissions")
+      .select("id, activity_name, activity_started_at, status, analysis_mode, race_id")
+      .eq("user_id", user.id)
+      .neq("status", "cancelled")
+      .order("activity_started_at", { ascending: false }),
+    fetchHomeTrackNotifications(supabase, user.id),
+  ]);
 
   return (
     <div className="flex flex-1 flex-col bg-splice-surface px-4 py-12 dark:bg-splice-navy">
@@ -50,11 +55,7 @@ export default async function TracksPage({ searchParams }: Props) {
           </p>
         ) : null}
 
-        {(rows ?? []).some((r) => r.status === "ready") ? (
-          <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
-            You have analysis ready to view.
-          </p>
-        ) : null}
+        <HomeTrackNotificationsBanner items={trackNotifications} />
         <div className="mt-6">
           <TracksHubList rows={rows ?? []} />
         </div>

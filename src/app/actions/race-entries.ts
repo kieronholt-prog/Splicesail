@@ -1,8 +1,7 @@
 "use server";
 
 import { crewTemplateFromForm } from "@/lib/boat-crew";
-import { fleetStartOffsetMinutesForRaceBoat } from "@/lib/race-boat-fleet-start-offset";
-import { recomputeFleetIdForRaceEntry } from "@/lib/recompute-race-entry-fleet";
+import { fleetMatchByRaceBoat } from "@/lib/race-boat-fleet-start-offset";
 import { fleetStartUtcMs } from "@/lib/tally-window";
 import { createClient } from "@/lib/supabase/server";
 import { getServerAuth } from "@/lib/supabase/auth-cache";
@@ -11,13 +10,20 @@ import {
   isRoOnlyFinishOutcome,
   isSailorDeclarationOutcome,
 } from "@/lib/finish-outcome-labels";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+
+export type TallyActionResult = { ok: true } | { ok: false; error: string };
+
+function tallyRevalidateHome() {
+  revalidatePath("/");
+}
 
 async function requireOwnRaceEntry(
   supabase: Awaited<ReturnType<typeof createClient>>,
   raceId: string,
   userId: string,
-) {
+): Promise<TallyActionResult | null> {
   const { data: row } = await supabase
     .from("race_entries")
     .select("id")
@@ -27,113 +33,142 @@ async function requireOwnRaceEntry(
     .maybeSingle();
 
   if (!row) {
-    redirect(
-      `/?error=${encodeURIComponent("Tally afloat or ashore on Home first to create your race entry.")}`,
-    );
+    return {
+      ok: false,
+      error: "Tally afloat or ashore on Home first to create your race entry.",
+    };
   }
+  return null;
 }
 
-async function assertRaceInGroup(
+type RaceGroupContext =
+  | { ok: true; scheduledAt: string; seriesId: string }
+  | { ok: false; error: string };
+
+async function loadRaceGroupContext(
   supabase: Awaited<ReturnType<typeof createClient>>,
   raceId: string,
   seriesId: string,
   groupId: string,
-): Promise<boolean> {
+): Promise<RaceGroupContext> {
   const { data: race } = await supabase
     .from("races")
-    .select("id, series_id")
+    .select("scheduled_at, series_id, series:series_id ( group_id )")
     .eq("id", raceId)
     .maybeSingle();
 
-  if (!race || race.series_id !== seriesId) return false;
+  if (!race) return { ok: false, error: "Race not found." };
+  if (race.series_id !== seriesId) return { ok: false, error: "Race not in this series." };
 
-  const { data: series } = await supabase
-    .from("series")
-    .select("group_id")
-    .eq("id", seriesId)
-    .maybeSingle();
+  const seriesNest = race.series as { group_id?: string } | { group_id?: string }[] | null;
+  const seriesRow = Array.isArray(seriesNest) ? seriesNest[0] : seriesNest;
+  if (!seriesRow?.group_id || seriesRow.group_id !== groupId) {
+    return { ok: false, error: "Race not in this series." };
+  }
 
-  return !!(series && series.group_id === groupId);
+  return { ok: true, scheduledAt: race.scheduled_at, seriesId: race.series_id };
 }
 
-export async function tallyAfloatAction(formData: FormData) {
-  await bumpTally(formData, "afloat");
+type TallyFleetContext = { offsetMinutes: number; fleetId: string | null };
+
+async function resolveTallyFleetContext(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  raceId: string,
+  boatId: string,
+  ctx: { groupId: string; seriesId: string },
+  existingFleetId: string | null,
+): Promise<TallyFleetContext> {
+  const matchKey = `${raceId}\u0000${boatId}`;
+  const matchPromise = fleetMatchByRaceBoat(supabase, [
+    { raceId, boatId, groupId: ctx.groupId, seriesId: ctx.seriesId },
+  ]);
+
+  if (existingFleetId) {
+    const [{ data: rf }, matches] = await Promise.all([
+      supabase
+        .from("race_fleets")
+        .select("start_offset_minutes")
+        .eq("id", existingFleetId)
+        .eq("race_id", raceId)
+        .maybeSingle(),
+      matchPromise,
+    ]);
+    const match = matches.get(matchKey);
+    const offsetMinutes =
+      rf?.start_offset_minutes != null && Number.isFinite(Number(rf.start_offset_minutes))
+        ? Number(rf.start_offset_minutes)
+        : (match?.offsetMinutes ?? 0);
+    return { offsetMinutes, fleetId: match?.fleetId ?? existingFleetId };
+  }
+
+  const matches = await matchPromise;
+  const match = matches.get(matchKey);
+  return { offsetMinutes: match?.offsetMinutes ?? 0, fleetId: match?.fleetId ?? null };
 }
 
-export async function tallyAshoreAction(formData: FormData) {
-  await bumpTally(formData, "ashore");
+export async function tallyAfloatAction(formData: FormData): Promise<TallyActionResult> {
+  return bumpTally(formData, "afloat");
 }
 
-export async function undoTallyAfloatAction(formData: FormData) {
+export async function tallyAshoreAction(formData: FormData): Promise<TallyActionResult> {
+  return bumpTally(formData, "ashore");
+}
+
+export async function undoTallyAfloatAction(formData: FormData): Promise<TallyActionResult> {
   const groupId = String(formData.get("group_id") ?? "").trim();
   const seriesId = String(formData.get("series_id") ?? "").trim();
   const raceId = String(formData.get("race_id") ?? "").trim();
   const boatIdForm = String(formData.get("boat_id") ?? "").trim();
 
   if (!groupId || !seriesId || !raceId || !boatIdForm) {
-    redirect(`/?error=${encodeURIComponent("Missing race or hull — reload Home.")}`);
+    return { ok: false, error: "Missing race or hull — reload Home." };
   }
 
   const { supabase, user } = await getServerAuth();
-
   if (!user) redirect("/login");
 
-  if (!(await assertRaceInGroup(supabase, raceId, seriesId, groupId))) {
-    redirect(`/?error=${encodeURIComponent("Race not in this series.")}`);
-  }
+  const [raceCtx, entryResult, entryGate] = await Promise.all([
+    loadRaceGroupContext(supabase, raceId, seriesId, groupId),
+    supabase
+      .from("race_entries")
+      .select("id, tally_afloat_at, tally_ashore_at, fleet_id, outcome")
+      .eq("race_id", raceId)
+      .eq("user_id", user.id)
+      .eq("boat_id", boatIdForm)
+      .maybeSingle(),
+    requireOwnRaceEntry(supabase, raceId, user.id),
+  ]);
 
-  await requireOwnRaceEntry(supabase, raceId, user.id);
+  if (entryGate) return entryGate;
+  if (!raceCtx.ok) return raceCtx;
 
-  const { data: entryRow } = await supabase
-    .from("race_entries")
-    .select("id, tally_afloat_at, tally_ashore_at, fleet_id, outcome")
-    .eq("race_id", raceId)
-    .eq("user_id", user.id)
-    .eq("boat_id", boatIdForm)
-    .maybeSingle();
-
+  const entryRow = entryResult.data;
   if (!entryRow?.tally_afloat_at) {
-    redirect(`/?error=${encodeURIComponent("Nothing to undo for that hull.")}`);
+    return { ok: false, error: "Nothing to undo for that hull." };
   }
   if (entryRow.tally_ashore_at) {
-    redirect(
-      `/?error=${encodeURIComponent(
-        "Tally afloat can't be undone after tally ashore has been recorded for that hull.",
-      )}`,
-    );
+    return {
+      ok: false,
+      error: "Tally afloat can't be undone after tally ashore has been recorded for that hull.",
+    };
   }
 
-  const { data: raceRow } = await supabase
-    .from("races")
-    .select("scheduled_at, series_id")
-    .eq("id", raceId)
-    .maybeSingle();
+  const fleetCtx = await resolveTallyFleetContext(
+    supabase,
+    raceId,
+    boatIdForm,
+    { groupId, seriesId },
+    entryRow.fleet_id,
+  );
 
-  if (!raceRow) {
-    redirect(`/?error=${encodeURIComponent("Race not found.")}`);
-  }
-
-  const fleetOffsetMinutes = await tallyFleetOffsetMinutesForHull(supabase, raceId, {
-    boatId: boatIdForm,
-    fleetId: entryRow.fleet_id,
-    ctx: { groupId, seriesId },
-  });
-
-  const fleetStartMs = fleetStartUtcMs(raceRow.scheduled_at, fleetOffsetMinutes);
-  const nowMs = Date.now();
-  if (nowMs >= fleetStartMs) {
-    redirect(
-      `/?error=${encodeURIComponent(
-        "Undo tally afloat is only available before your fleet start.",
-      )}`,
-    );
+  const fleetStartMs = fleetStartUtcMs(raceCtx.scheduledAt, fleetCtx.offsetMinutes);
+  if (Date.now() >= fleetStartMs) {
+    return { ok: false, error: "Undo tally afloat is only available before your fleet start." };
   }
 
   const preserveOcs =
     entryRow.outcome != null && String(entryRow.outcome).toLowerCase() === "ocs";
 
-  // Keep boat_id — null would violate race_entries_race_user_null_boat_uidx when a
-  // placeholder row already exists for (race_id, user_id).
   const { error } = await supabase
     .from("race_entries")
     .update({
@@ -144,124 +179,94 @@ export async function undoTallyAfloatAction(formData: FormData) {
     })
     .eq("id", entryRow.id);
 
-  if (error) {
-    redirect(`/?error=${encodeURIComponent(error.message)}`);
-  }
+  if (error) return { ok: false, error: error.message };
 
-  redirect("/");
-}
-
-async function tallyFleetOffsetMinutesForHull(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  raceId: string,
-  opts: {
-    boatId: string;
-    fleetId: string | null;
-    ctx: { groupId: string; seriesId: string };
-  },
-): Promise<number> {
-  if (opts.fleetId) {
-    const { data: rf } = await supabase
-      .from("race_fleets")
-      .select("start_offset_minutes")
-      .eq("id", opts.fleetId)
-      .eq("race_id", raceId)
-      .maybeSingle();
-    return rf?.start_offset_minutes != null && Number.isFinite(Number(rf.start_offset_minutes))
-      ? Number(rf.start_offset_minutes)
-      : 0;
-  }
-  return fleetStartOffsetMinutesForRaceBoat(supabase, {
-    raceId,
-    boatId: opts.boatId,
-    groupId: opts.ctx.groupId,
-    seriesId: opts.ctx.seriesId,
-  });
+  tallyRevalidateHome();
+  return { ok: true };
 }
 
 async function bumpTally(
   formData: FormData,
   which: "afloat" | "ashore",
-) {
+): Promise<TallyActionResult> {
   const groupId = String(formData.get("group_id") ?? "").trim();
   const seriesId = String(formData.get("series_id") ?? "").trim();
   const raceId = String(formData.get("race_id") ?? "").trim();
   const boatIdForm = String(formData.get("boat_id") ?? "").trim();
 
   if (!groupId || !seriesId || !raceId) {
-    redirect(`/?error=${encodeURIComponent("Missing race context.")}`);
+    return { ok: false, error: "Missing race context." };
   }
 
   if (!boatIdForm) {
-    redirect(
-      `/?error=${encodeURIComponent(
+    return {
+      ok: false,
+      error:
         which === "afloat"
           ? "Choose which hull you are tallying — one button per boat on Home."
           : "Missing hull on tally — reload Home and try again.",
-      )}`,
-    );
+    };
   }
 
   const { supabase, user } = await getServerAuth();
-
   if (!user) redirect("/login");
-
-  if (!(await assertRaceInGroup(supabase, raceId, seriesId, groupId))) {
-    redirect(`/?error=${encodeURIComponent("Race not in this series.")}`);
-  }
 
   const outcomeRaw =
     which === "ashore" ? String(formData.get("outcome") ?? "").trim() : "";
 
-  const { data: raceRow } = await supabase
-    .from("races")
-    .select("scheduled_at, series_id")
-    .eq("id", raceId)
-    .maybeSingle();
+  const ctx = { groupId, seriesId };
 
-  if (!raceRow) {
-    redirect(`/?error=${encodeURIComponent("Race not found.")}`);
+  const [raceCtx, existingEntryResult, linked] = await Promise.all([
+    loadRaceGroupContext(supabase, raceId, seriesId, groupId),
+    supabase
+      .from("race_entries")
+      .select("id, fleet_id, tally_afloat_at, tally_ashore_at, boat_id, outcome")
+      .eq("race_id", raceId)
+      .eq("user_id", user.id)
+      .eq("boat_id", boatIdForm)
+      .maybeSingle(),
+    boatLinkedToSeriesSignup(supabase, {
+      seriesId,
+      userId: user.id,
+      boatId: boatIdForm,
+    }),
+  ]);
+
+  if (!raceCtx.ok) return raceCtx;
+  if (!linked) {
+    return { ok: false, error: "That hull is not on your series signup for this fixture." };
   }
 
-  const ctx = { groupId, seriesId };
-  const { data: existingEntryForBoat } = await supabase
-    .from("race_entries")
-    .select("id, fleet_id, tally_afloat_at, tally_ashore_at, boat_id, outcome")
-    .eq("race_id", raceId)
-    .eq("user_id", user.id)
-    .eq("boat_id", boatIdForm)
-    .maybeSingle();
+  const existingEntryForBoat = existingEntryResult.data;
 
-  const fleetOffsetMinutes = await tallyFleetOffsetMinutesForHull(supabase, raceId, {
-    boatId: boatIdForm,
-    fleetId: existingEntryForBoat?.fleet_id ?? null,
+  const fleetCtx = await resolveTallyFleetContext(
+    supabase,
+    raceId,
+    boatIdForm,
     ctx,
-  });
+    existingEntryForBoat?.fleet_id ?? null,
+  );
 
-  const fleetStartMs = fleetStartUtcMs(raceRow.scheduled_at, fleetOffsetMinutes);
+  const fleetStartMs = fleetStartUtcMs(raceCtx.scheduledAt, fleetCtx.offsetMinutes);
   const nowMs = Date.now();
 
   if (which === "afloat") {
     if (nowMs >= fleetStartMs) {
-      redirect(
-        `/?error=${encodeURIComponent(
-          "Tally afloat is only available until your fleet start (race signal plus fleet offset).",
-        )}`,
-      );
+      return {
+        ok: false,
+        error: "Tally afloat is only available until your fleet start (race signal plus fleet offset).",
+      };
     }
-  } else {
-    if (nowMs < fleetStartMs) {
-      redirect(
-        `/?error=${encodeURIComponent(
-          "Tally ashore and declaration open from your fleet start onward.",
-        )}`,
-      );
-    }
+  } else if (nowMs < fleetStartMs) {
+    return {
+      ok: false,
+      error: "Tally ashore and declaration open from your fleet start onward.",
+    };
   }
 
   if (which === "ashore") {
     if (!outcomeRaw.length) {
-      redirect(`/?error=${encodeURIComponent("Choose a declaration.")}`);
+      return { ok: false, error: "Choose a declaration." };
     }
 
     const priorOutcome =
@@ -273,39 +278,32 @@ async function bumpTally(
 
     if (priorRoOutcome) {
       if (outcomeRaw !== priorRoOutcome) {
-        redirect(
-          `/?error=${encodeURIComponent(
-            `The race officer recorded ${priorRoOutcome.toUpperCase()} for this entry — tally ashore only to confirm.`,
-          )}`,
-        );
+        return {
+          ok: false,
+          error: `The race officer recorded ${priorRoOutcome.toUpperCase()} for this entry — tally ashore only to confirm.`,
+        };
       }
     } else if (isRoOnlyFinishOutcome(outcomeRaw)) {
-      redirect(
-        `/?error=${encodeURIComponent(
-          `${outcomeRaw.toUpperCase()} is recorded by the race officer — you cannot declare it yourself here.`,
-        )}`,
-      );
+      return {
+        ok: false,
+        error: `${outcomeRaw.toUpperCase()} is recorded by the race officer — you cannot declare it yourself here.`,
+      };
     } else if (!isSailorDeclarationOutcome(outcomeRaw)) {
-      redirect(`/?error=${encodeURIComponent("Invalid finish status for tally ashore.")}`);
+      return { ok: false, error: "Invalid finish status for tally ashore." };
     }
   }
 
   const nowIso = new Date().toISOString();
 
   if (which === "afloat") {
-    const linked = await boatLinkedToSeriesSignup(supabase, {
-      seriesId,
-      userId: user.id,
-      boatId: boatIdForm,
-    });
-    if (!linked) {
-      redirect(`/?error=${encodeURIComponent("That hull is not on your series signup for this fixture.")}`);
-    }
     if (existingEntryForBoat?.tally_afloat_at) {
-      redirect(
-        `/?error=${encodeURIComponent("You have already tallied afloat for this hull — use undo on Home to change.")}`,
-      );
+      return {
+        ok: false,
+        error: "You have already tallied afloat for this hull — use undo on Home to change.",
+      };
     }
+
+    const fleetId = fleetCtx.fleetId;
 
     if (!existingEntryForBoat) {
       const { error } = await supabase.from("race_entries").insert({
@@ -313,31 +311,19 @@ async function bumpTally(
         user_id: user.id,
         boat_id: boatIdForm,
         tally_afloat_at: nowIso,
+        fleet_id: fleetId,
       });
-      if (error) {
-        redirect(`/?error=${encodeURIComponent(error.message)}`);
-      }
+      if (error) return { ok: false, error: error.message };
     } else {
       const { error } = await supabase
         .from("race_entries")
-        .update({ tally_afloat_at: nowIso })
+        .update({ tally_afloat_at: nowIso, fleet_id: fleetId })
         .eq("id", existingEntryForBoat.id);
-      if (error) {
-        redirect(`/?error=${encodeURIComponent(error.message)}`);
-      }
+      if (error) return { ok: false, error: error.message };
     }
 
-    await recomputeFleetIdForRaceEntry(supabase, ctx, raceId, user.id);
-    redirect("/?afloat=1");
-  }
-
-  const linked = await boatLinkedToSeriesSignup(supabase, {
-    seriesId,
-    userId: user.id,
-    boatId: boatIdForm,
-  });
-  if (!linked) {
-    redirect(`/?error=${encodeURIComponent("That hull is not on your series signup for this fixture.")}`);
+    tallyRevalidateHome();
+    return { ok: true };
   }
 
   const basePatch = {
@@ -346,19 +332,19 @@ async function bumpTally(
   };
 
   if (!existingEntryForBoat) {
+    const fleetId = fleetCtx.fleetId;
     const { error: insErr } = await supabase.from("race_entries").insert({
       race_id: raceId,
       user_id: user.id,
       boat_id: boatIdForm,
+      fleet_id: fleetId,
       ...basePatch,
     });
 
-    if (insErr) {
-      redirect(`/?error=${encodeURIComponent(insErr.message)}`);
-    }
+    if (insErr) return { ok: false, error: insErr.message };
 
-    await recomputeFleetIdForRaceEntry(supabase, ctx, raceId, user.id);
-    redirect("/?ashore=1");
+    tallyRevalidateHome();
+    return { ok: true };
   }
 
   const { error: ashErr } = await supabase
@@ -366,12 +352,20 @@ async function bumpTally(
     .update(basePatch)
     .eq("id", existingEntryForBoat.id);
 
-  if (ashErr) {
-    redirect(`/?error=${encodeURIComponent(ashErr.message)}`);
-  }
+  if (ashErr) return { ok: false, error: ashErr.message };
 
-  await recomputeFleetIdForRaceEntry(supabase, ctx, raceId, user.id);
-  redirect("/?ashore=1");
+  tallyRevalidateHome();
+  return { ok: true };
+}
+
+async function assertRaceInGroup(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  raceId: string,
+  seriesId: string,
+  groupId: string,
+): Promise<boolean> {
+  const ctx = await loadRaceGroupContext(supabase, raceId, seriesId, groupId);
+  return ctx.ok;
 }
 
 export async function updateRaceEntrySailNumberForHomeAction(formData: FormData) {
@@ -393,7 +387,8 @@ export async function updateRaceEntrySailNumberForHomeAction(formData: FormData)
     redirect(`/?error=${encodeURIComponent("Race not in this series.")}`);
   }
 
-  await requireOwnRaceEntry(supabase, raceId, user.id);
+  const entryGate = await requireOwnRaceEntry(supabase, raceId, user.id);
+  if (entryGate && !entryGate.ok) redirect(`/?error=${encodeURIComponent(entryGate.error)}`);
 
   const { data: tgt } = await supabase
     .from("race_entries")
@@ -440,7 +435,8 @@ export async function updateRaceEntryCrewOverrideForHomeAction(formData: FormDat
     redirect(`/?error=${encodeURIComponent("Race not in this series.")}`);
   }
 
-  await requireOwnRaceEntry(supabase, raceId, user.id);
+  const entryGate = await requireOwnRaceEntry(supabase, raceId, user.id);
+  if (entryGate && !entryGate.ok) redirect(`/?error=${encodeURIComponent(entryGate.error)}`);
 
   if (clear) {
     const { data: tgt } = await supabase

@@ -1,13 +1,13 @@
 "use server";
 
 import { appOrigin } from "@/lib/app-origin";
+import { getServerAuth } from "@/lib/supabase/auth-cache";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 
-async function postAuthRedirect(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+/** Where to send the user after cookies are set (login or signup with immediate session). */
+export async function resolvePostAuthRedirectPath(): Promise<string> {
+  const { supabase, user } = await getServerAuth();
   if (!user) return "/login";
   const { data: prof } = await supabase
     .from("profiles")
@@ -16,24 +16,6 @@ async function postAuthRedirect(supabase: Awaited<ReturnType<typeof createClient
     .maybeSingle();
   if (!prof?.has_finished_account_intro) return "/account";
   return "/";
-}
-
-export async function loginAction(formData: FormData) {
-  const email = String(formData.get("email") ?? "").trim();
-  const password = String(formData.get("password") ?? "");
-
-  if (!email || !password) {
-    redirect("/login?error=" + encodeURIComponent("Email and password are required."));
-  }
-
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-
-  if (error) {
-    redirect("/login?error=" + encodeURIComponent(error.message));
-  }
-
-  redirect(await postAuthRedirect(supabase));
 }
 
 export async function signupAction(formData: FormData) {
@@ -65,8 +47,8 @@ export async function signupAction(formData: FormData) {
     redirect("/signup?error=" + encodeURIComponent(error.message));
   }
 
-  if (data.session) {
-    redirect(await postAuthRedirect(supabase));
+  if (data.session && data.user) {
+    redirect(await resolvePostAuthRedirectPath());
   }
 
   redirect(

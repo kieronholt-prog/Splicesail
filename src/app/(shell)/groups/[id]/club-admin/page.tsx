@@ -68,12 +68,16 @@ export default async function GroupClubAdminPage({ params, searchParams }: Props
   const { data: group, error: groupErr } = await supabase
     .from("groups")
     .select(
-      "id, name, slug, iana_timezone, ro_added_boats_series_start_line, ro_added_boats_series_standings",
+      "id, name, slug, iana_timezone, ro_added_boats_series_start_line, ro_added_boats_series_standings, approval_status",
     )
     .eq("id", groupId)
     .maybeSingle();
 
   if (groupErr || !group) notFound();
+
+  if ((group as { approval_status?: string }).approval_status !== "approved") {
+    redirect(`/groups/${groupId}?pending=1`);
+  }
 
   const { data: me } = await supabase
     .from("group_memberships")

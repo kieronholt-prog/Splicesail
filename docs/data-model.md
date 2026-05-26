@@ -13,7 +13,7 @@ PostgreSQL schemas live under **`supabase/migrations/`**. This document groups t
 
 | Table | Notes |
 |--------|--------|
-| `groups` | Club; `created_by`, optional **`slug`** (required for public results), **`iana_timezone`**, **`ro_added_boats_series_start_line`**, **`ro_added_boats_series_standings`** |
+| `groups` | Club; `created_by`, optional **`slug`**, **`iana_timezone`**, **`approval_status`** (`pending` / `approved` / `rejected`), RO-added boat settings |
 | `group_memberships` | `(group_id, user_id)` PK, **`role`**: sailor / club_admin / race_officer |
 | `group_join_requests` | Pending access; admin approve/decline on club page |
 

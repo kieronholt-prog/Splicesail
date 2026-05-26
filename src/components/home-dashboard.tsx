@@ -1,15 +1,12 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { type Handedness, type HomeAmendRaceTarget } from "@/components/home-amend-race-details";
 import {
   HomeNextRaceTallyPanel,
   type HomeBoatTallyPanelRow,
   type HomeTalliedAfloatListItem,
 } from "@/components/home-next-race-tally";
-import { HomeBoatRaceResultsTable } from "@/components/home-boat-race-results-table";
-import { HomeRecentRaceResultsTable } from "@/components/home-recent-race-results-table";
-import { HomeTrackNotificationsBanner } from "@/components/sailing-analysis/home-track-notifications-banner";
-import { fetchHomeBoatRaceResults } from "@/lib/home-boat-race-results";
-import { fetchHomeRecentRaceResults } from "@/lib/home-recent-race-results";
+import { HomeResultsSections, HomeResultsSectionsFallback } from "@/components/home-results-sections";
 import type { CrewTemplate } from "@/lib/boat-crew";
 import { resolveEffectiveCrewTemplate } from "@/lib/boat-crew";
 import { fleetStartUtcMs, homeFeaturedRaceVisibleUntilMs } from "@/lib/tally-window";
@@ -20,7 +17,6 @@ import {
 } from "@/lib/club-display-format";
 import { clubTodayYmd, clubWallYmdFromUtcMs, resolveClubIanaTimeZone } from "@/lib/club-time";
 import { getServerAuth } from "@/lib/supabase/auth-cache";
-import { fetchHomeTrackNotifications } from "@/lib/home-track-notifications";
 import {
   fleetMatchByRaceBoat,
   fleetStartOffsetMinutesByRaceBoat,
@@ -36,8 +32,6 @@ import { wallTimeMs } from "@/lib/wall-time";
 export type HomeDashboardQuery =
   | {
       error?: string;
-      tallyAfloat?: boolean;
-      tallyAshore?: boolean;
       detailsSaved?: boolean;
       outcomeSaved?: boolean;
     }
@@ -153,10 +147,10 @@ export async function HomeDashboard({
 }) {
   const { supabase } = await getServerAuth();
 
-  const [{ data: regRows }, trackNotifications] = await Promise.all([
-    supabase.from("series_registrations").select("series_id").eq("user_id", userId),
-    fetchHomeTrackNotifications(supabase, userId),
-  ]);
+  const { data: regRows } = await supabase
+    .from("series_registrations")
+    .select("series_id")
+    .eq("user_id", userId);
 
   const registeredSeriesIds = [...new Set((regRows ?? []).map((r) => r.series_id))];
 
@@ -276,13 +270,7 @@ export async function HomeDashboard({
           .limit(400)
       : null;
 
-  const [recentRaceResults, boatRaceResults, featuredRacesResult] = await Promise.all([
-    seriesIds.length > 0 ? fetchHomeRecentRaceResults(supabase, userId, seriesIds) : Promise.resolve(null),
-    seriesBase.length > 0
-      ? fetchHomeBoatRaceResults(supabase, userId, seriesBase, clubTzByGroupId)
-      : Promise.resolve([]),
-    featuredRacesQuery ?? Promise.resolve({ data: null as null }),
-  ]);
+  const [featuredRacesResult] = await Promise.all([featuredRacesQuery ?? Promise.resolve({ data: null as null })]);
 
   const candRows = featuredRacesResult.data;
 
@@ -815,7 +803,7 @@ export async function HomeDashboard({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-splice-navy dark:text-splice-surface">Home</h1>
           <p className="mt-2 text-sm text-splice-ocean dark:text-splice-water">
-            Today&apos;s tally is first; latest race results follow. Series signups stay on{" "}
+            Tally afloat and ashore on race days. Series signups stay on{" "}
             <Link href="/groups" className="font-medium text-splice-blue dark:text-splice-water">
               My Entries
             </Link>
@@ -843,8 +831,6 @@ export async function HomeDashboard({
             Race outcome saved.
           </p>
         ) : null}
-
-        <HomeTrackNotificationsBanner items={trackNotifications} />
 
         <section className="rounded-xl border border-splice-sky bg-white p-6 dark:border-splice-navy-light dark:bg-splice-navy">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-splice-blue dark:text-splice-water">
@@ -900,31 +886,11 @@ export async function HomeDashboard({
                 : "Register for a series to see tally here on race days."}
             </p>
           )}
-
-          <h3 className="mb-2 mt-10 text-xs font-semibold uppercase tracking-wide text-splice-blue dark:text-splice-water">
-            My latest race results
-          </h3>
-          {recentRaceResults ? (
-            <HomeRecentRaceResultsTable results={recentRaceResults} />
-          ) : (
-            <p className="text-sm text-splice-ocean dark:text-splice-water">
-              No recorded race finishes in your series yet. When a race officer logs finishes, the latest race ranking
-              appears here.
-            </p>
-          )}
-
-          <h3 className="mb-2 mt-10 text-xs font-semibold uppercase tracking-wide text-splice-blue dark:text-splice-water">
-            My boat race results
-          </h3>
-          {boatRaceResults.length > 0 ? (
-            <HomeBoatRaceResultsTable groups={boatRaceResults} />
-          ) : (
-            <p className="text-sm text-splice-ocean dark:text-splice-water">
-              No boat results in your series yet. When a boat on your series signup has recorded race finishes, each
-              race appears here grouped by series.
-            </p>
-          )}
         </section>
+
+        <Suspense fallback={<HomeResultsSectionsFallback />}>
+          <HomeResultsSections userId={userId} />
+        </Suspense>
       </main>
     </div>
   );

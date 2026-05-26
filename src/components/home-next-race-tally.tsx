@@ -1,11 +1,13 @@
 "use client";
 
-import { type ReactNode, useEffect, useId, useState } from "react";
+import { type ReactNode, useEffect, useId, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import {
   tallyAfloatAction,
   tallyAshoreAction,
   undoTallyAfloatAction,
+  type TallyActionResult,
 } from "@/app/actions/race-entries";
 import {
   HomeAmendRaceDetailsButton,
@@ -21,6 +23,40 @@ import {
   roOnlyFinishOutcomeLabel,
 } from "@/lib/finish-outcome-labels";
 import { fleetStartUtcMs } from "@/lib/tally-window";
+
+async function submitTallyForm(
+  action: (formData: FormData) => Promise<TallyActionResult>,
+  form: HTMLFormElement,
+): Promise<string | null> {
+  const result = await action(new FormData(form));
+  return result.ok ? null : result.error;
+}
+
+function useTallyFormSubmit(onSuccess?: () => void) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(
+    event: React.FormEvent<HTMLFormElement>,
+    action: (formData: FormData) => Promise<TallyActionResult>,
+  ) {
+    event.preventDefault();
+    setError(null);
+    const form = event.currentTarget;
+    const message = await submitTallyForm(action, form);
+    if (message) {
+      setError(message);
+      return;
+    }
+    onSuccess?.();
+    startTransition(() => {
+      router.refresh();
+    });
+  }
+
+  return { pending, error, handleSubmit, clearError: () => setError(null) };
+}
 
 /** Base row computed on the server; panel adds formatted status strings. */
 export type HomeBoatTallyRow = {
@@ -626,8 +662,8 @@ function AfloatTallySliderRow({
   seriesId,
   raceId,
   boatId,
-  afloatRecorded,
-  afloatLoggedDisplay,
+  afloatRecorded: afloatRecordedProp,
+  afloatLoggedDisplay: afloatLoggedDisplayProp,
   amendDetails,
   fleetName,
   talliedAfloatList,
@@ -644,10 +680,45 @@ function AfloatTallySliderRow({
   talliedAfloatList: HomeTalliedAfloatListItem[];
   pursuitTallySlots?: PursuitTallySlotDisplay[];
 }) {
+  const [afloatRecorded, setAfloatRecorded] = useState(afloatRecordedProp);
+  const [afloatLoggedDisplay, setAfloatLoggedDisplay] = useState(afloatLoggedDisplayProp);
+  const { pending, error, handleSubmit } = useTallyFormSubmit(() => {
+    setAfloatRecorded(true);
+    setAfloatLoggedDisplay(
+      new Date().toLocaleString(undefined, {
+        hour: "2-digit",
+        minute: "2-digit",
+        day: "numeric",
+        month: "short",
+      }),
+    );
+  });
+  const {
+    pending: undoPending,
+    error: undoError,
+    handleSubmit: handleUndoSubmit,
+  } = useTallyFormSubmit(() => {
+    setAfloatRecorded(false);
+    setAfloatLoggedDisplay("");
+  });
+
+  useEffect(() => {
+    setAfloatRecorded(afloatRecordedProp);
+    setAfloatLoggedDisplay(afloatLoggedDisplayProp);
+  }, [afloatRecordedProp, afloatLoggedDisplayProp]);
+
   const leftOnTop = afloatRecorded;
+  const busy = pending || undoPending;
+  const formError = error ?? undoError;
 
   return (
-    <div className="flex w-full min-w-0 items-stretch gap-0 overflow-visible">
+    <div className="flex flex-col gap-2">
+      {formError ? (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800 dark:bg-red-950/50 dark:text-red-200" role="alert">
+          {formError}
+        </p>
+      ) : null}
+      <div className="flex w-full min-w-0 items-stretch gap-0 overflow-visible">
       <div
         className={`relative -mr-6 min-w-0 flex-1 basis-0 shrink-0 ${leftOnTop ? "z-20" : "z-10"}`}
       >
@@ -686,33 +757,42 @@ function AfloatTallySliderRow({
         className={`relative -ml-6 min-w-0 flex-1 basis-0 shrink-0 ${AFLOAT_PRIMARY_BTN_H} ${leftOnTop ? "z-10" : "z-20"}`}
       >
         {afloatRecorded ? (
-          <form action={undoTallyAfloatAction} className={AFLOAT_RIGHT_FORM}>
+          <form
+            onSubmit={(event) => handleUndoSubmit(event, undoTallyAfloatAction)}
+            className={AFLOAT_RIGHT_FORM}
+          >
             <input type="hidden" name="group_id" value={groupId} />
             <input type="hidden" name="series_id" value={seriesId} />
             <input type="hidden" name="race_id" value={raceId} />
             <input type="hidden" name="boat_id" value={boatId} />
             <button
               type="submit"
-              className={`${UNDO_BTN} ${AFLOAT_RIGHT_REAR_ACTION} ${AFLOAT_REAR_OUTLINE} box-border flex h-full w-full items-center justify-center pl-8 text-splice-navy hover:bg-splice-surface dark:text-splice-surface dark:hover:bg-splice-navy`}
+              disabled={busy}
+              className={`${UNDO_BTN} ${AFLOAT_RIGHT_REAR_ACTION} ${AFLOAT_REAR_OUTLINE} box-border flex h-full w-full items-center justify-center pl-8 text-splice-navy hover:bg-splice-surface disabled:cursor-wait disabled:opacity-70 dark:text-splice-surface dark:hover:bg-splice-navy`}
             >
-              Undo Tally Afloat
+              {undoPending ? "Undoing…" : "Undo Tally Afloat"}
             </button>
           </form>
         ) : (
-          <form action={tallyAfloatAction} className={AFLOAT_RIGHT_FORM}>
+          <form
+            onSubmit={(event) => handleSubmit(event, tallyAfloatAction)}
+            className={AFLOAT_RIGHT_FORM}
+          >
             <input type="hidden" name="group_id" value={groupId} />
             <input type="hidden" name="series_id" value={seriesId} />
             <input type="hidden" name="race_id" value={raceId} />
             <input type="hidden" name="boat_id" value={boatId} />
             <button
               type="submit"
-              className={`${AFLOAT_AMBER_SLIDER} flex items-center justify-center`}
+              disabled={busy}
+              className={`${AFLOAT_AMBER_SLIDER} flex items-center justify-center disabled:cursor-wait disabled:opacity-80`}
             >
-              Tally afloat
+              {pending ? "Tallying…" : "Tally afloat"}
             </button>
           </form>
         )}
       </div>
+    </div>
     </div>
   );
 }
@@ -901,6 +981,7 @@ function AshoreDeclarationModal({
 }) {
   const titleId = useId();
   const roOutcomeLocked = lockedRoOutcome != null;
+  const { pending, error, handleSubmit } = useTallyFormSubmit(onClose);
 
   const [outcome, setOutcome] = useState(() => normalizeDeclarationInitial(initialOutcome));
 
@@ -956,12 +1037,20 @@ function AshoreDeclarationModal({
             "Confirm your sailing declaration from fleet start onward. You can revisit and amend anytime after that."
           )}
         </p>
-        <form action={tallyAshoreAction} className="mt-4 flex flex-col gap-4">
+        <form
+          onSubmit={(event) => handleSubmit(event, tallyAshoreAction)}
+          className="mt-4 flex flex-col gap-4"
+        >
           <input type="hidden" name="group_id" value={groupId} />
           <input type="hidden" name="series_id" value={seriesId} />
           <input type="hidden" name="race_id" value={raceId} />
           <input type="hidden" name="boat_id" value={boatId} />
           <input type="hidden" name="outcome" value={outcome} />
+          {error ? (
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800 dark:bg-red-950/50 dark:text-red-200" role="alert">
+              {error}
+            </p>
+          ) : null}
           {roOutcomeLocked && lockedRoOutcome ? (
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
               Declaration:{" "}
@@ -991,13 +1080,16 @@ function AshoreDeclarationModal({
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-splice-navy px-4 py-2 text-xs font-medium text-white dark:bg-splice-foam dark:text-splice-navy"
+              disabled={pending}
+              className="rounded-lg bg-splice-navy px-4 py-2 text-xs font-medium text-white disabled:cursor-wait disabled:opacity-80 dark:bg-splice-foam dark:text-splice-navy"
             >
-              {roOutcomeLocked && !amend
-                ? "Record tally ashore"
-                : amend
-                  ? "Save declaration"
-                  : "Record tally ashore & declaration"}
+              {pending
+                ? "Saving…"
+                : roOutcomeLocked && !amend
+                  ? "Record tally ashore"
+                  : amend
+                    ? "Save declaration"
+                    : "Record tally ashore & declaration"}
             </button>
           </div>
         </form>

@@ -21,8 +21,15 @@ function AuthFormSpinner() {
 }
 
 /** Covers the whole viewport while a server auth action runs (hides stale nav + form). */
-export function AuthFormPendingScreen({ message }: { message: string }) {
-  const { pending } = useFormStatus();
+export function AuthFormPendingScreen({
+  message,
+  pending: pendingOverride,
+}: {
+  message: string;
+  pending?: boolean;
+}) {
+  const { pending: formPending } = useFormStatus();
+  const pending = pendingOverride ?? formPending;
   if (!pending) return null;
 
   return (
@@ -43,11 +50,14 @@ export function AuthFormPendingScreen({ message }: { message: string }) {
 export function AuthFormFields({
   children,
   className = "",
+  pending: pendingOverride,
 }: {
   children: React.ReactNode;
   className?: string;
+  pending?: boolean;
 }) {
-  const { pending } = useFormStatus();
+  const { pending: formPending } = useFormStatus();
+  const pending = pendingOverride ?? formPending;
   return (
     <div
       className={`${className}${pending ? " pointer-events-none opacity-60" : ""}`}
@@ -62,12 +72,15 @@ export function AuthFormSubmitButton({
   idleLabel,
   pendingLabel,
   className = "mt-2 rounded-lg bg-splice-navy px-4 py-2.5 text-sm font-medium text-white transition hover:bg-splice-navy-light disabled:cursor-wait disabled:opacity-80 dark:bg-splice-foam dark:text-splice-navy dark:hover:bg-splice-sky",
+  pending: pendingOverride,
 }: {
   idleLabel: string;
   pendingLabel: string;
   className?: string;
+  pending?: boolean;
 }) {
-  const { pending } = useFormStatus();
+  const { pending: formPending } = useFormStatus();
+  const pending = pendingOverride ?? formPending;
 
   return (
     <button type="submit" disabled={pending} aria-busy={pending} className={className}>

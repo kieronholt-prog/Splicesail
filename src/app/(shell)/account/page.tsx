@@ -278,6 +278,9 @@ export default async function AccountPage({ searchParams }: Props) {
 
         <section className="mt-10 rounded-xl border border-splice-sky bg-splice-surface px-5 py-4 dark:border-splice-ocean dark:bg-splice-navy-light/60">
           <h2 className="text-sm font-semibold text-splice-navy dark:text-splice-surface">Create new club</h2>
+          <p className="mt-1 text-sm text-splice-ocean dark:text-splice-water">
+            New clubs are reviewed by the Splice team before they appear in search.
+          </p>
           <p className="mt-2 text-xs text-splice-ocean dark:text-splice-water">
             Start a sailing club on Splice — you become the club admin so you can approve members and run series.
           </p>

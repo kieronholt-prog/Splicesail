@@ -33,7 +33,11 @@ The onboarding sailor must **already exist** in Auth before an admin can attach 
 
 ## Creating a club
 
-- **`/groups/new`** — **`createGroupAction`**; creator becomes **`club_admin`** via DB trigger on `groups`.
+- **`/groups/new`** — **`createGroupAction`**; new rows start with **`approval_status = pending`**.
+- The **platform approver** (env **`SPLICE_PLATFORM_APPROVER_EMAIL`**) receives a **Resend email** with signed **Approve / Reject** links (`GET /api/club-approval?token=…` — no login).
+- Until approved, the club is **hidden from directory search**, **join requests are blocked**, and **`is_group_member` / `is_group_admin` return false** (no series or admin operations).
+- The creator sees a **waiting for approval** page on **`/groups/[id]`**; existing clubs were backfilled to **`approved`**.
+- On approval the creator is emailed; the DB trigger still made them **`club_admin`** at insert time — admin powers activate once approved.
 
 ## Series signup (after membership)
 

@@ -1,5 +1,6 @@
 "use server";
 
+import { sendNewClubApprovalRequestEmail } from "@/lib/club-approval-email";
 import { getServerAuth } from "@/lib/supabase/auth-cache";
 import { redirect } from "next/navigation";
 
@@ -33,18 +34,18 @@ export async function createGroupAction(formData: FormData) {
     name,
     slug,
     created_by: user.id,
+    approval_status: "pending",
   });
 
   if (insertErr) {
     redirect("/groups/new?error=" + encodeURIComponent(insertErr.message));
   }
 
-  // Avoid INSERT … RETURNING + SELECT RLS: membership row is added in an AFTER trigger,
-  // but returning the new row requires SELECT before that membership always passes policies.
   const { data: row, error: readErr } = await supabase
     .from("groups")
     .select("id")
     .eq("created_by", user.id)
+    .eq("approval_status", "pending")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -59,5 +60,27 @@ export async function createGroupAction(formData: FormData) {
     );
   }
 
-  redirect(`/groups/${row.id}`);
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("display_name")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const emailResult = await sendNewClubApprovalRequestEmail({
+    groupId: row.id,
+    clubName: name,
+    clubSlug: slug,
+    creatorEmail: user.email ?? null,
+    creatorDisplayName: profile?.display_name ?? null,
+  });
+
+  if (!emailResult.sent) {
+    redirect(
+      `/groups/${row.id}?pending=1&email_error=${encodeURIComponent(
+        emailResult.error ?? "Approval email could not be sent.",
+      )}`,
+    );
+  }
+
+  redirect(`/groups/${row.id}?pending=1`);
 }

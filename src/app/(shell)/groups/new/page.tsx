@@ -17,7 +17,7 @@ export default async function NewGroupPage({ searchParams }: Props) {
         </h1>
         <p className="mt-2 text-sm text-splice-ocean dark:text-splice-water">
           You become <strong className="font-medium text-splice-navy-light dark:text-splice-sky">club admin</strong>{" "}
-          for this organisation.
+          once the Splice team approves this club. You&apos;ll get an email when it&apos;s ready.
         </p>
 
         {error ? (

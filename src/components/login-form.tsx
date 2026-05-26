@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { loginAction } from "@/app/actions/auth";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { resolvePostAuthRedirectPath } from "@/app/actions/auth";
 import {
   AuthFormFields,
   AuthFormPendingScreen,
   AuthFormSubmitButton,
 } from "@/components/auth-form-controls";
+import { createClient } from "@/lib/supabase/client";
 
 const inputClassName =
   "rounded-lg border border-splice-water bg-white px-3 py-2 text-splice-navy outline-none ring-splice-blue focus:ring-2 dark:border-splice-ocean dark:bg-splice-navy dark:text-splice-foam";
@@ -15,7 +18,44 @@ type Props = {
   error: string | null;
 };
 
-export function LoginForm({ error }: Props) {
+export function LoginForm({ error: initialError }: Props) {
+  const router = useRouter();
+  const [error, setError] = useState(initialError);
+  const [pending, setPending] = useState(false);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const email = String(new FormData(form).get("email") ?? "").trim();
+    const password = String(new FormData(form).get("password") ?? "");
+
+    if (!email || !password) {
+      setError("Email and password are required.");
+      return;
+    }
+
+    setError(null);
+    setPending(true);
+
+    try {
+      const supabase = createClient();
+      const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+
+      if (authError) {
+        setError(authError.message);
+        setPending(false);
+        return;
+      }
+
+      const path = await resolvePostAuthRedirectPath();
+      router.push(path);
+      router.refresh();
+    } catch {
+      setError("Something went wrong. Please try again.");
+      setPending(false);
+    }
+  }
+
   return (
     <>
       {error ? (
@@ -27,9 +67,9 @@ export function LoginForm({ error }: Props) {
         </p>
       ) : null}
 
-      <form action={loginAction} className="mt-6 flex flex-col gap-4">
-        <AuthFormPendingScreen message="Signing in…" />
-        <AuthFormFields className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
+        <AuthFormPendingScreen message="Signing in…" pending={pending} />
+        <AuthFormFields className="flex flex-col gap-4" pending={pending}>
           <label className="flex flex-col gap-1 text-sm font-medium text-splice-ocean dark:text-splice-water">
             Email
             <input name="email" type="email" autoComplete="email" required className={inputClassName} />
@@ -45,7 +85,7 @@ export function LoginForm({ error }: Props) {
             />
           </label>
         </AuthFormFields>
-        <AuthFormSubmitButton idleLabel="Log in" pendingLabel="Signing in…" />
+        <AuthFormSubmitButton idleLabel="Log in" pendingLabel="Signing in…" pending={pending} />
       </form>
 
       <p className="mt-6 text-center text-sm text-splice-ocean dark:text-splice-water">

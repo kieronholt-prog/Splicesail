@@ -22,7 +22,13 @@ Optional:
 | `STRAVA_CLIENT_SECRET` | Client secret from that app (Cloudflare Worker encrypted secret, or Strava API settings) |
 | `NEXT_PUBLIC_APP_URL` | Optional override for OAuth and **calendar subscribe links**. Local: `http://localhost:3000`. Production default: **`https://splicesail.com`** (`src/lib/app-url.ts`) when unset. Strava callback: `{origin}/api/strava/callback`. |
 | `NEXT_PUBLIC_MAPBOX_TOKEN` | Mapbox public token for course-setup maps on track analysis pages (reuse `CONFIG.MAPBOX_TOKEN` from Sailstats). |
-| `SUPABASE_SERVICE_ROLE_KEY` | Admin API / maintenance only—not used by the app today; **never** expose publicly |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only: **`/api/club-approval`** token links update `groups.approval_status`; **never** expose publicly |
+| `SPLICE_PLATFORM_APPROVER_EMAIL` | Inbox for new-club approval emails |
+| `SPLICE_CLUB_APPROVAL_SECRET` | HMAC secret for signed approve/reject links (random string) |
+| `RESEND_API_KEY` | [Resend](https://resend.com) API key for transactional email |
+| `RESEND_FROM_EMAIL` | Verified sender, e.g. `Splice <notify@splicesail.com>` |
+| `SPLICE_UNDER_DEVELOPMENT` | Set to `1` to show an under-development page on all routes (except health probes and club-approval email links) |
+| `SPLICE_UNDER_DEVELOPMENT_BYPASS` | Optional secret; open `/under-development?bypass=SECRET` once to set a 7-day bypass cookie for testing |
 
 **Public club results** (`/results/[slug]`) use the anon key with RLS (`20261623120000_public_results_anon_rls.sql`). The club must have a **slug** set on `groups`.
 

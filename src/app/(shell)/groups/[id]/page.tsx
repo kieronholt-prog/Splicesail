@@ -33,6 +33,8 @@ type Props = {
     join_requested?: string;
     join_approved?: string;
     join_declined?: string;
+    pending?: string;
+    email_error?: string;
   }>;
 };
 
@@ -45,6 +47,8 @@ export default async function GroupDetailPage({ params, searchParams }: Props) {
   const joinRequested = q.join_requested === "1";
   const joinApprovedAdmin = q.join_approved === "1";
   const joinDeclinedAdmin = q.join_declined === "1";
+  const pendingCreated = q.pending === "1";
+  const approvalEmailError = q.email_error ? decodeURIComponent(q.email_error) : null;
 
   const { supabase, user } = await getServerAuth();
 
@@ -57,7 +61,7 @@ export default async function GroupDetailPage({ params, searchParams }: Props) {
 
   const { data: group, error: groupError } = await supabase
     .from("groups")
-    .select("id, name, slug, created_at, iana_timezone")
+    .select("id, name, slug, created_at, iana_timezone, approval_status, created_by")
     .eq("id", id)
     .maybeSingle();
 
@@ -68,6 +72,67 @@ export default async function GroupDetailPage({ params, searchParams }: Props) {
   const clubTz = resolveClubIanaTimeZone(
     (group as { iana_timezone?: string | null }).iana_timezone,
   );
+
+  const approvalStatus = (group as { approval_status?: string }).approval_status ?? "approved";
+  const isCreator = (group as { created_by?: string }).created_by === user.id;
+
+  if (isCreator && approvalStatus === "pending") {
+    return (
+      <div className="flex flex-1 flex-col bg-splice-surface px-4 py-12 dark:bg-splice-navy">
+        <main className="mx-auto w-full max-w-2xl">
+          <p className="text-sm text-splice-ocean dark:text-splice-water">
+            <Link href="/account" className="text-splice-blue hover:underline dark:text-splice-water">
+              ← Account
+            </Link>
+          </p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-splice-navy dark:text-splice-surface">
+            {group.name}
+          </h1>
+          <p className="mt-2 text-sm text-splice-ocean dark:text-splice-water">
+            Waiting for Splice platform approval before this club goes live.
+          </p>
+
+          {pendingCreated ? (
+            <p className="mt-6 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
+              Request submitted — we&apos;ve emailed the Splice team to review this club.
+            </p>
+          ) : null}
+
+          {approvalEmailError ? (
+            <p className="mt-6 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:bg-amber-950/40 dark:text-amber-100" role="alert">
+              Your club was saved, but the approval email could not be sent ({approvalEmailError}). Contact
+              the Splice team so they can approve it manually.
+            </p>
+          ) : null}
+
+          <p className="mt-8 rounded-lg border border-splice-sky bg-white px-4 py-6 text-sm text-splice-ocean dark:border-splice-navy-light dark:bg-splice-navy dark:text-splice-water">
+            You&apos;ll receive an email when the club is approved. Until then it stays hidden from search and
+            members cannot join.
+          </p>
+        </main>
+      </div>
+    );
+  }
+
+  if (isCreator && approvalStatus === "rejected") {
+    return (
+      <div className="flex flex-1 flex-col bg-splice-surface px-4 py-12 dark:bg-splice-navy">
+        <main className="mx-auto w-full max-w-2xl">
+          <p className="text-sm text-splice-ocean dark:text-splice-water">
+            <Link href="/account" className="text-splice-blue hover:underline dark:text-splice-water">
+              ← Account
+            </Link>
+          </p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-splice-navy dark:text-splice-surface">
+            {group.name}
+          </h1>
+          <p className="mt-8 rounded-lg border border-red-200 bg-red-50 px-4 py-6 text-sm text-red-900 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100">
+            This club request was not approved. Contact the Splice team if you think that was a mistake.
+          </p>
+        </main>
+      </div>
+    );
+  }
 
   const { data: myMembership } = await supabase
     .from("group_memberships")
