@@ -27,5 +27,5 @@ export async function setWorkModeAction(formData: FormData) {
     sameSite: "lax",
   });
 
-  redirect(`${workModeHomeHref(next)}?mode_flip=1`);
+  redirect(workModeHomeHref(next));
 }

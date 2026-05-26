@@ -63,7 +63,7 @@ Three **work modes** (`WorkMode` in `src/lib/work-mode.ts`) change nav chrome, h
 
 **Mode pills** in the header (`WorkModePills`) switch modes via **`setWorkModeAction`**. Opening staff URLs can infer mode from path (`staffRouteWorkMode`). **`ClubStaffModeLinks`** on a club page shows admin/RO shortcuts only outside sailor mode.
 
-Shell transitions and theming: `src/lib/work-mode-transition.ts`, `src/components/work-mode-shell.tsx`.
+Shell theming: `src/components/work-mode-shell.tsx`.
 
 ## Route map (authenticated)
 

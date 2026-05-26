@@ -3,14 +3,6 @@
 import { useRef } from "react";
 import { setWorkModeAction } from "@/app/actions/work-mode";
 import {
-  WORK_MODE_FLIP_EXIT_CLASS,
-  WORK_MODE_FLIP_PENDING_CLASS,
-  clearWorkModeFlipClasses,
-  flushWorkModeFlipStyles,
-  workModeFlipDurationMs,
-  workModeFlipExitSubmitDelayMs,
-} from "@/lib/work-mode-transition";
-import {
   workModeLabel,
   workModePillIdleClass,
   workModePillSelectedClass,
@@ -37,27 +29,7 @@ export function WorkModePills({ mode, availableModes }: Props) {
     if (!form || !targetInput) return;
 
     targetInput.value = target;
-    const root = document.documentElement;
-    const durationMs = workModeFlipDurationMs();
-
-    const submit = () => {
-      root.classList.remove(WORK_MODE_FLIP_EXIT_CLASS);
-      root.dataset.workModeFlipTarget = target;
-      root.classList.add(WORK_MODE_FLIP_PENDING_CLASS);
-      form.requestSubmit();
-    };
-
-    if (durationMs <= 0) {
-      clearWorkModeFlipClasses(root);
-      form.requestSubmit();
-      return;
-    }
-
-    clearWorkModeFlipClasses(root);
-    root.classList.add(WORK_MODE_FLIP_EXIT_CLASS);
-    flushWorkModeFlipStyles(root);
-
-    window.setTimeout(submit, workModeFlipExitSubmitDelayMs());
+    form.requestSubmit();
   }
 
   return (

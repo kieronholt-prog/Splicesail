@@ -153,12 +153,10 @@ export async function HomeDashboard({
 }) {
   const { supabase } = await getServerAuth();
 
-  const trackNotifications = await fetchHomeTrackNotifications(supabase, userId);
-
-  const { data: regRows } = await supabase
-    .from("series_registrations")
-    .select("series_id")
-    .eq("user_id", userId);
+  const [{ data: regRows }, trackNotifications] = await Promise.all([
+    supabase.from("series_registrations").select("series_id").eq("user_id", userId),
+    fetchHomeTrackNotifications(supabase, userId),
+  ]);
 
   const registeredSeriesIds = [...new Set((regRows ?? []).map((r) => r.series_id))];
 
@@ -236,14 +234,6 @@ export async function HomeDashboard({
 
   const seriesIds = seriesBase.map((s) => s.seriesId);
 
-  const recentRaceResults =
-    seriesIds.length > 0 ? await fetchHomeRecentRaceResults(supabase, userId, seriesIds) : null;
-
-  const boatRaceResults =
-    seriesBase.length > 0
-      ? await fetchHomeBoatRaceResults(supabase, userId, seriesBase, clubTzByGroupId)
-      : [];
-
   const homeRenderNowMs = wallTimeMs();
   const HOME_RACE_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
   const HOME_RACE_FOCUS_MAX = 6;
@@ -261,12 +251,13 @@ export async function HomeDashboard({
 
   let featuredRaceMetas: FeaturedRaceMeta[] = [];
 
-  if (seriesIds.length) {
-    const lookbackIso = new Date(homeRenderNowMs - HOME_RACE_LOOKBACK_MS).toISOString();
-    const { data: candRows } = await supabase
-      .from("races")
-      .select(
-        `
+  const lookbackIso = new Date(homeRenderNowMs - HOME_RACE_LOOKBACK_MS).toISOString();
+  const featuredRacesQuery =
+    seriesIds.length > 0
+      ? supabase
+          .from("races")
+          .select(
+            `
         id,
         name,
         scheduled_at,
@@ -278,23 +269,33 @@ export async function HomeDashboard({
           groups ( name, iana_timezone )
         )
       `,
-      )
-      .in("series_id", seriesIds)
-      .gte("scheduled_at", lookbackIso)
-      .order("scheduled_at", { ascending: true })
-      .limit(400);
+          )
+          .in("series_id", seriesIds)
+          .gte("scheduled_at", lookbackIso)
+          .order("scheduled_at", { ascending: true })
+          .limit(400)
+      : null;
 
-    const candRaceIds = (candRows ?? []).map((r) => r.id);
-    if (candRaceIds.length) {
-      const rows = candRows ?? [];
+  const [recentRaceResults, boatRaceResults, featuredRacesResult] = await Promise.all([
+    seriesIds.length > 0 ? fetchHomeRecentRaceResults(supabase, userId, seriesIds) : Promise.resolve(null),
+    seriesBase.length > 0
+      ? fetchHomeBoatRaceResults(supabase, userId, seriesBase, clubTzByGroupId)
+      : Promise.resolve([]),
+    featuredRacesQuery ?? Promise.resolve({ data: null as null }),
+  ]);
 
-      const fleetOffsetCandRequests: {
-        raceId: string;
-        boatId: string;
-        groupId: string;
-        seriesId: string;
-      }[] = [];
-      for (const row of rows) {
+  const candRows = featuredRacesResult.data;
+
+  if (seriesIds.length && candRows?.length) {
+    const rows = candRows;
+
+    const fleetOffsetCandRequests: {
+      raceId: string;
+      boatId: string;
+      groupId: string;
+      seriesId: string;
+    }[] = [];
+    for (const row of rows) {
         const sraw = row.series;
         const se = Array.isArray(sraw) ? sraw[0] : sraw;
         const gid =
@@ -410,7 +411,6 @@ export async function HomeDashboard({
           });
         }
       }
-    }
   }
 
   const boatsForAmend = new Map<string, { handedness: string | null; crew_template: unknown }>();
@@ -578,8 +578,12 @@ export async function HomeDashboard({
         group_fleet_id: (rf.group_fleet_id as string | null) ?? null,
       });
     }
-    for (const [gid, sources] of fleetsByGroup) {
-      const flags = await resolveClubClassFlagsForRaceFleets(supabase, gid, sources);
+    const flagResults = await Promise.all(
+      [...fleetsByGroup.entries()].map(([gid, sources]) =>
+        resolveClubClassFlagsForRaceFleets(supabase, gid, sources),
+      ),
+    );
+    for (const flags of flagResults) {
       for (const [fid, flag] of flags) {
         classFlagByFleetId.set(fid, flag);
       }
@@ -605,27 +609,25 @@ export async function HomeDashboard({
 
     const talliedLabelByBoatId = new Map<string, string>();
     const talliedDefaultSailByBoatId = new Map<string, string | null>();
-    if (talliedBoatIds.size) {
-      const { data: talliedBoats } = await supabase
-        .from("boats")
-        .select("id, label, default_sail_number")
-        .in("id", [...talliedBoatIds]);
-      for (const b of talliedBoats ?? []) {
-        talliedLabelByBoatId.set(b.id, b.label);
-        talliedDefaultSailByBoatId.set(b.id, (b.default_sail_number as string | null) ?? null);
-      }
-    }
-
     const helmNameByUserId = new Map<string, string>();
-    if (talliedUserIds.size) {
-      const { data: profs } = await supabase
-        .from("profiles")
-        .select("id, display_name")
-        .in("id", [...talliedUserIds]);
-      for (const p of profs ?? []) {
-        const name = (p.display_name as string | null)?.trim();
-        if (name) helmNameByUserId.set(p.id, name);
-      }
+    const [{ data: talliedBoats }, { data: profs }] = await Promise.all([
+      talliedBoatIds.size
+        ? supabase
+            .from("boats")
+            .select("id, label, default_sail_number")
+            .in("id", [...talliedBoatIds])
+        : Promise.resolve({ data: null }),
+      talliedUserIds.size
+        ? supabase.from("profiles").select("id, display_name").in("id", [...talliedUserIds])
+        : Promise.resolve({ data: null }),
+    ]);
+    for (const b of talliedBoats ?? []) {
+      talliedLabelByBoatId.set(b.id, b.label);
+      talliedDefaultSailByBoatId.set(b.id, (b.default_sail_number as string | null) ?? null);
+    }
+    for (const p of profs ?? []) {
+      const name = (p.display_name as string | null)?.trim();
+      if (name) helmNameByUserId.set(p.id, name);
     }
 
     for (const row of talliedEntryRows ?? []) {
@@ -680,47 +682,51 @@ export async function HomeDashboard({
     }
   >();
 
-  for (const meta of featuredRaceMetas) {
-    if (normalizeRaceType(meta.raceType) !== "pursuit") continue;
-    const homeTz = clubTzByGroupId.get(meta.groupId) ?? resolveClubIanaTimeZone(null);
-    const slots = await loadPursuitSlotsForRace(supabase, meta.raceId);
-    const classStartByKey = await pursuitClassStartAtByKey(supabase, meta.raceId);
+  await Promise.all(
+    featuredRaceMetas
+      .filter((meta) => normalizeRaceType(meta.raceType) === "pursuit")
+      .map(async (meta) => {
+        const homeTz = clubTzByGroupId.get(meta.groupId) ?? resolveClubIanaTimeZone(null);
+        const [slots, classStartByKey, { data: raceEntries }] = await Promise.all([
+          loadPursuitSlotsForRace(supabase, meta.raceId),
+          pursuitClassStartAtByKey(supabase, meta.raceId),
+          supabase
+            .from("race_entries")
+            .select("boat_id, sail_number_override, tally_afloat_at")
+            .eq("race_id", meta.raceId),
+        ]);
 
-    const { data: raceEntries } = await supabase
-      .from("race_entries")
-      .select("boat_id, sail_number_override, tally_afloat_at")
-      .eq("race_id", meta.raceId);
+        const entriesByClassKey = new Map<string, { sailDisplay: string; talliedAfloat: boolean }[]>();
+        for (const e of raceEntries ?? []) {
+          const boatId = e.boat_id as string | null;
+          if (!boatId) continue;
+          const boatMeta = signupBoatMetaById.get(boatId);
+          const ck = boatMeta?.rya_class_key?.trim();
+          if (!ck) continue;
+          const sail = homeSailNumberDisplay(
+            e.sail_number_override as string | null,
+            boatMeta?.default_sail_number ?? null,
+          );
+          const list = entriesByClassKey.get(ck) ?? [];
+          list.push({ sailDisplay: sail, talliedAfloat: !!e.tally_afloat_at });
+          entriesByClassKey.set(ck, list);
+        }
 
-    const entriesByClassKey = new Map<string, { sailDisplay: string; talliedAfloat: boolean }[]>();
-    for (const e of raceEntries ?? []) {
-      const boatId = e.boat_id as string | null;
-      if (!boatId) continue;
-      const boatMeta = signupBoatMetaById.get(boatId);
-      const ck = boatMeta?.rya_class_key?.trim();
-      if (!ck) continue;
-      const sail = homeSailNumberDisplay(
-        e.sail_number_override as string | null,
-        boatMeta?.default_sail_number ?? null,
-      );
-      const list = entriesByClassKey.get(ck) ?? [];
-      list.push({ sailDisplay: sail, talliedAfloat: !!e.tally_afloat_at });
-      entriesByClassKey.set(ck, list);
-    }
-
-    pursuitContextByRaceId.set(meta.raceId, {
-      classStartByKey,
-      buildSlotsForBoat: (boatId, talliedAfloat) => {
-        const ck = signupBoatMetaById.get(boatId)?.rya_class_key?.trim() ?? null;
-        return buildPursuitTallySlotDisplays({
-          slots,
-          clubTz: homeTz,
-          viewerClassKey: ck,
-          viewerTalliedAfloat: talliedAfloat,
-          entriesByClassKey,
+        pursuitContextByRaceId.set(meta.raceId, {
+          classStartByKey,
+          buildSlotsForBoat: (boatId, talliedAfloat) => {
+            const ck = signupBoatMetaById.get(boatId)?.rya_class_key?.trim() ?? null;
+            return buildPursuitTallySlotDisplays({
+              slots,
+              clubTz: homeTz,
+              viewerClassKey: ck,
+              viewerTalliedAfloat: talliedAfloat,
+              entriesByClassKey,
+            });
+          },
         });
-      },
-    });
-  }
+      }),
+  );
 
   const featuredForHome: HomeFeaturedRaceCard[] = featuredRaceMetas.map((meta) => {
     const signupBoats = signupBoatsBySeriesId.get(meta.seriesId) ?? [];
