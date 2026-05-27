@@ -1,14 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { resolvePostAuthRedirectPath } from "@/app/actions/auth";
 import {
   AuthFormFields,
   AuthFormPendingScreen,
   AuthFormSubmitButton,
 } from "@/components/auth-form-controls";
+import { resolvePostAuthRedirectPathForUser } from "@/lib/post-auth-redirect";
 import { createClient } from "@/lib/supabase/client";
 
 const inputClassName =
@@ -19,7 +18,6 @@ type Props = {
 };
 
 export function LoginForm({ error: initialError }: Props) {
-  const router = useRouter();
   const [error, setError] = useState(initialError);
   const [pending, setPending] = useState(false);
 
@@ -47,9 +45,17 @@ export function LoginForm({ error: initialError }: Props) {
         return;
       }
 
-      const path = await resolvePostAuthRedirectPath();
-      router.push(path);
-      router.refresh();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setError("Signed in but session was not established. Please try again.");
+        setPending(false);
+        return;
+      }
+
+      const path = await resolvePostAuthRedirectPathForUser(supabase, user.id);
+      window.location.assign(path);
     } catch {
       setError("Something went wrong. Please try again.");
       setPending(false);

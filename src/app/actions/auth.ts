@@ -1,21 +1,16 @@
 "use server";
 
 import { appOrigin } from "@/lib/app-origin";
+import { resolvePostAuthRedirectPathForUser } from "@/lib/post-auth-redirect";
 import { getServerAuth } from "@/lib/supabase/auth-cache";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 
-/** Where to send the user after cookies are set (login or signup with immediate session). */
-export async function resolvePostAuthRedirectPath(): Promise<string> {
+/** Where to send the user after cookies are set (signup with immediate session). */
+async function resolvePostAuthRedirectPath(): Promise<string> {
   const { supabase, user } = await getServerAuth();
   if (!user) return "/login";
-  const { data: prof } = await supabase
-    .from("profiles")
-    .select("has_finished_account_intro")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (!prof?.has_finished_account_intro) return "/account";
-  return "/";
+  return resolvePostAuthRedirectPathForUser(supabase, user.id);
 }
 
 export async function signupAction(formData: FormData) {
