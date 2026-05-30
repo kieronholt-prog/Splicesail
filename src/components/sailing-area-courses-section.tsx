@@ -204,11 +204,10 @@ export function CourseDetailPanel({
   const savedEntries = useMemo(() => courseToEntries(course), [course]);
   const hasFirstLap = savedEntries.some((e) => e.firstLapOnly);
 
-  const usedNames = useMemo(() => new Set(entries.map((e) => e.name)), [entries]);
-  const availableNames = useMemo(
-    () => allMarks.map((m) => m.name).filter((n) => !usedNames.has(n)),
-    [allMarks, usedNames],
-  );
+  // All marks available — marks legitimately appear multiple times in courses
+  // (e.g. PILE 2 in preamble and sequence, LAID MK B twice in Course M)
+  // and start/finish lines must remain addable.
+  const availableNames = useMemo(() => allMarks.map((m) => m.name), [allMarks]);
 
   const { mark_sequence, marks_preamble } = useMemo(() => entriesToPayload(entries), [entries]);
 
