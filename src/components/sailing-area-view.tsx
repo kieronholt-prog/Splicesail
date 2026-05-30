@@ -384,7 +384,7 @@ export function SailingAreaView({
       {addingCourse ? (
         <AddCourseForm groupId={groupId} onDone={() => setAddingCourse(false)} />
       ) : selectedCourse ? (
-        <CourseDetailPanel course={selectedCourse} allMarks={marks} groupId={groupId} />
+        <CourseDetailPanel key={selectedCourse.id} course={selectedCourse} allMarks={marks} groupId={groupId} />
       ) : (
         <SailingMarksSection groupId={groupId} marks={marks} />
       )}
