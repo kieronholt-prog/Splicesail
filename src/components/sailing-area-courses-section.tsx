@@ -33,7 +33,13 @@ export function courseToEntries(c: SailingCourseRow): MarkEntry[] {
     tack,
     firstLapOnly: false,
   }));
-  return [...pre, ...seq];
+
+  // Preamble marks come AFTER the start line (seq[0]) and before the
+  // repeating marks (seq[1:]). They are rounded on the first lap only.
+  if (pre.length > 0 && seq.length > 0) {
+    return [seq[0], ...pre, ...seq.slice(1)];
+  }
+  return pre.length > 0 ? [...pre, ...seq] : seq;
 }
 
 export function entriesToPayload(entries: MarkEntry[]) {
