@@ -7,7 +7,6 @@ import { DEFAULT_MAP_CENTER } from "@/lib/sailing-analysis/map-display";
 import {
   SailingMarksSection,
   markDisplayProps,
-  PILE_BUOY_RE,
   type SailingMarkVm,
 } from "@/components/sailing-area-marks-section";
 import {
@@ -17,7 +16,7 @@ import {
   TACK_COLOR,
   COURSE_TYPE_LABEL,
 } from "@/components/sailing-area-courses-section";
-import type { SailingCourseRow } from "@/lib/sailing-analysis/types";
+import { isLineMark, type SailingCourseRow } from "@/lib/sailing-analysis/types";
 
 // ─── Legend data ──────────────────────────────────────────────────────────────
 
@@ -38,10 +37,23 @@ const COURSE_LEGEND = [
 
 const SF_LINE_ID = "area-sf-lines";
 const COURSE_LINE_ID = "area-course-line";
+const EMPTY_FC: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
+
+function lineCenter(m: SailingMarkVm): { lat: number; lon: number } {
+  return m.lat2 != null && m.lon2 != null
+    ? { lat: (m.lat + m.lat2) / 2, lon: (m.lon + m.lon2) / 2 }
+    : { lat: m.lat, lon: m.lon };
+}
+
+function markerEl(cssText: string, text: string, title: string): HTMLDivElement {
+  const el = document.createElement("div");
+  el.style.cssText = cssText;
+  el.textContent = text;
+  el.title = title;
+  return el;
+}
 
 // ─── Unified sailing area map ─────────────────────────────────────────────────
-// Merges the logic from the former MarksOverviewMap (all-marks mode) and
-// CoursePreviewMap (course mode) into one persistent Mapbox instance.
 
 function SailingAreaMap({
   marks,
@@ -60,7 +72,8 @@ function SailingAreaMap({
 
   const byName = useMemo(() => new Map(marks.map((m) => [m.name, m])), [marks]);
 
-  // Mount once
+  // Mount once — also set up persistent GeoJSON sources so we can use setData
+  // later rather than removing and re-adding sources (which causes stale-course bugs).
   useEffect(() => {
     if (!token || !containerRef.current || mapRef.current) return;
     mapboxgl.accessToken = token;
@@ -72,7 +85,18 @@ function SailingAreaMap({
     });
     mapRef.current = map;
     map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
-    map.on("load", () => setLoaded(true));
+    map.on("load", () => {
+      // Persistent sources — data is swapped via setData on every selection change.
+      map.addSource(SF_LINE_ID, { type: "geojson", data: EMPTY_FC });
+      map.addLayer({ id: `${SF_LINE_ID}-glow`, type: "line", source: SF_LINE_ID, paint: { "line-color": "#3b82f6", "line-width": 10, "line-opacity": 0.28, "line-blur": 3 } });
+      map.addLayer({ id: SF_LINE_ID, type: "line", source: SF_LINE_ID, paint: { "line-color": "#ffffff", "line-width": 3, "line-opacity": 1, "line-dasharray": [2, 1.5] } });
+
+      map.addSource(COURSE_LINE_ID, { type: "geojson", data: EMPTY_FC });
+      map.addLayer({ id: `${COURSE_LINE_ID}-glow`, type: "line", source: COURSE_LINE_ID, paint: { "line-color": "#ffffff", "line-width": 8, "line-opacity": 0.12 } });
+      map.addLayer({ id: COURSE_LINE_ID, type: "line", source: COURSE_LINE_ID, paint: { "line-color": "#ffffff", "line-width": 2, "line-opacity": 0.65, "line-dasharray": [3, 2] } });
+
+      setLoaded(true);
+    });
     return () => {
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
@@ -82,206 +106,169 @@ function SailingAreaMap({
     };
   }, [token]);
 
-  // Re-draw whenever selection, marks, or courses change
+  // Re-draw whenever selection, marks, or courses change.
+  // Sources already exist (added in init effect) — use setData to avoid the
+  // remove/re-add cycle that caused stale courses appearing on different buttons.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !loaded) return;
+
+    const sfSrc = map.getSource(SF_LINE_ID) as mapboxgl.GeoJSONSource;
+    const courseSrc = map.getSource(COURSE_LINE_ID) as mapboxgl.GeoJSONSource;
 
     // Clear previous markers
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
 
-    // Clear previous layers/sources
-    for (const id of [`${SF_LINE_ID}-glow`, SF_LINE_ID, `${COURSE_LINE_ID}-glow`, COURSE_LINE_ID]) {
-      if (map.getLayer(id)) map.removeLayer(id);
-    }
-    for (const id of [SF_LINE_ID, COURSE_LINE_ID]) {
-      if (map.getSource(id)) map.removeSource(id);
-    }
-
     const lats: number[] = [];
     const lons: number[] = [];
 
+    function addMarker(el: HTMLDivElement, lng: number, lat: number, popup: string) {
+      lats.push(lat); lons.push(lng);
+      const marker = new mapboxgl.Marker({ element: el })
+        .setLngLat([lng, lat])
+        .setPopup(new mapboxgl.Popup({ offset: 15, closeButton: false }).setText(popup))
+        .addTo(map!);
+      markersRef.current.push(marker);
+    }
+
     if (selectedCourseId === null) {
-      // ── All-marks mode (ported from MarksOverviewMap) ────────────────────
+      // ── All-marks mode ────────────────────────────────────────────────────
       for (const m of marks) {
         const { color, label } = markDisplayProps(m);
-        lats.push(m.lat);
-        lons.push(m.lon);
-
-        const elA = document.createElement("div");
-        elA.title = m.name;
-        elA.style.cssText = `width:26px;height:26px;border-radius:50%;border:3px solid ${color};background:#0a101fcc;color:${color};display:flex;align-items:center;justify-content:center;font:700 9px ui-monospace,monospace;box-shadow:0 0 0 2px #00000055;cursor:default;`;
-        elA.textContent = label;
-        const markerA = new mapboxgl.Marker({ element: elA })
-          .setLngLat([m.lon, m.lat])
-          .setPopup(new mapboxgl.Popup({ offset: 15, closeButton: false }).setText(m.name))
-          .addTo(map);
-        markersRef.current.push(markerA);
-
-        if (m.mark_kind === "start_finish" && m.lat2 != null && m.lon2 != null) {
-          lats.push(m.lat2);
-          lons.push(m.lon2);
-          const elB = document.createElement("div");
-          elB.title = `${m.name} (end B)`;
-          elB.style.cssText = `width:20px;height:20px;border-radius:50%;border:3px solid ${color};background:#0a101fcc;color:${color};display:flex;align-items:center;justify-content:center;font:700 8px ui-monospace,monospace;box-shadow:0 0 0 2px #00000055;cursor:default;`;
-          elB.textContent = "B";
-          const markerB = new mapboxgl.Marker({ element: elB })
-            .setLngLat([m.lon2, m.lat2])
-            .addTo(map);
-          markersRef.current.push(markerB);
+        addMarker(
+          markerEl(`width:26px;height:26px;border-radius:50%;border:3px solid ${color};background:#0a101fcc;color:${color};display:flex;align-items:center;justify-content:center;font:700 9px ui-monospace,monospace;box-shadow:0 0 0 2px #00000055;cursor:default;`, label, m.name),
+          m.lon, m.lat, m.name,
+        );
+        if (isLineMark(m.mark_kind) && m.lat2 != null && m.lon2 != null) {
+          addMarker(
+            markerEl(`width:20px;height:20px;border-radius:50%;border:3px solid ${color};background:#0a101fcc;color:${color};display:flex;align-items:center;justify-content:center;font:700 8px ui-monospace,monospace;box-shadow:0 0 0 2px #00000055;cursor:default;`, "B", `${m.name} (end B)`),
+            m.lon2, m.lat2, `${m.name} — end B`,
+          );
         }
       }
 
-      // Start/finish lines
-      const sfLines = marks.filter(
-        (m) => m.mark_kind === "start_finish" && m.lat2 != null && m.lon2 != null,
-      );
-      if (sfLines.length > 0) {
-        const features = sfLines.map((m) => ({
+      // All line marks → SF_LINE_ID source
+      const sfFeatures = marks
+        .filter((m) => isLineMark(m.mark_kind) && m.lat2 != null && m.lon2 != null)
+        .map((m) => ({
           type: "Feature" as const,
-          geometry: {
-            type: "LineString" as const,
-            coordinates: [[m.lon, m.lat], [m.lon2!, m.lat2!]],
-          },
+          geometry: { type: "LineString" as const, coordinates: [[m.lon, m.lat], [m.lon2!, m.lat2!]] },
           properties: {},
         }));
-        map.addSource(SF_LINE_ID, {
-          type: "geojson",
-          data: { type: "FeatureCollection", features },
-        });
-        map.addLayer({
-          id: `${SF_LINE_ID}-glow`,
-          type: "line",
-          source: SF_LINE_ID,
-          paint: { "line-color": "#3b82f6", "line-width": 10, "line-opacity": 0.28, "line-blur": 3 },
-        });
-        map.addLayer({
-          id: SF_LINE_ID,
-          type: "line",
-          source: SF_LINE_ID,
-          paint: {
-            "line-color": "#ffffff",
-            "line-width": 3,
-            "line-opacity": 1,
-            "line-dasharray": [2, 1.5],
-          },
-        });
-      }
+      sfSrc.setData({ type: "FeatureCollection", features: sfFeatures });
+      courseSrc.setData(EMPTY_FC);
+
     } else {
       // ── Course mode ───────────────────────────────────────────────────────
       const course = courses.find((c) => c.id === selectedCourseId);
-      if (!course) return;
+      if (!course) { sfSrc.setData(EMPTY_FC); courseSrc.setData(EMPTY_FC); return; }
 
-      // S/F mark for this club — used as route start/end regardless of sequence
-      const sfMark = marks.find((m) => m.mark_kind === "start_finish");
-      const sfCenter =
-        sfMark && sfMark.lat2 != null && sfMark.lon2 != null
-          ? { lat: (sfMark.lat + sfMark.lat2) / 2, lon: (sfMark.lon + sfMark.lon2) / 2 }
-          : sfMark
-          ? { lat: sfMark.lat, lon: sfMark.lon }
-          : null;
-
-      // Always draw the S/F line (end A + B + connecting line) in course mode
-      if (sfMark && sfMark.lat2 != null && sfMark.lon2 != null) {
-        for (const [lng, lat, label, title] of [
-          [sfMark.lon,  sfMark.lat,  "A", `${sfMark.name} — end A`],
-          [sfMark.lon2, sfMark.lat2, "B", `${sfMark.name} — end B`],
-        ] as [number, number, string, string][]) {
-          lats.push(lat); lons.push(lng);
-          const el = document.createElement("div");
-          el.title = title;
-          el.style.cssText = `width:22px;height:22px;border-radius:50%;border:3px solid #3b82f6;background:#0a101fcc;color:#3b82f6;display:flex;align-items:center;justify-content:center;font:700 8px ui-monospace,monospace;box-shadow:0 0 0 2px #00000055;cursor:default;`;
-          el.textContent = label;
-          const m = new mapboxgl.Marker({ element: el })
-            .setLngLat([lng, lat])
-            .setPopup(new mapboxgl.Popup({ offset: 15, closeButton: false }).setText(title))
-            .addTo(map);
-          markersRef.current.push(m);
-        }
-        map.addSource(SF_LINE_ID, {
-          type: "geojson",
-          data: {
-            type: "Feature",
-            geometry: { type: "LineString", coordinates: [[sfMark.lon, sfMark.lat], [sfMark.lon2, sfMark.lat2]] },
-            properties: {},
-          },
-        });
-        map.addLayer({ id: `${SF_LINE_ID}-glow`, type: "line", source: SF_LINE_ID, paint: { "line-color": "#3b82f6", "line-width": 10, "line-opacity": 0.28, "line-blur": 3 } });
-        map.addLayer({ id: SF_LINE_ID, type: "line", source: SF_LINE_ID, paint: { "line-color": "#ffffff", "line-width": 3, "line-opacity": 1, "line-dasharray": [2, 1.5] } });
-      }
-
-      // Explicit S/F center marker so the route start/end is clearly visible
-      if (sfCenter) {
-        lats.push(sfCenter.lat); lons.push(sfCenter.lon);
-        const elSF = document.createElement("div");
-        elSF.title = sfMark?.name ?? "Start / Finish";
-        elSF.style.cssText = `width:32px;height:32px;border-radius:50%;border:3px solid #3b82f6;background:#0a101fcc;color:#3b82f6;display:flex;align-items:center;justify-content:center;font:700 8px ui-monospace,monospace;box-shadow:0 0 0 2px #00000055,0 0 0 5px #3b82f622;cursor:default;`;
-        elSF.textContent = "S/F";
-        const markerSF = new mapboxgl.Marker({ element: elSF })
-          .setLngLat([sfCenter.lon, sfCenter.lat])
-          .setPopup(new mapboxgl.Popup({ offset: 18, closeButton: false }).setText("Start / Finish"))
-          .addTo(map);
-        markersRef.current.push(markerSF);
-      }
-
-      // Resolve all course entries (preamble + sequence) against club marks
+      // Resolve all course entries against club marks
       const entries = courseToEntries(course);
       const resolved = entries
         .map((e) => ({ ...e, mark: byName.get(e.name) ?? null }))
         .filter((e): e is typeof e & { mark: SailingMarkVm } => e.mark !== null);
 
-      // Numbered markers for each course mark (preamble marks shown dimmed)
-      resolved.forEach(({ name, tack, firstLapOnly, mark }, i) => {
+      // Find the start and finish line marks for this course.
+      // Prefer marks explicitly in the course sequence; fall back to club-level marks.
+      const lineInCourse = resolved.filter((e) => isLineMark(e.mark.mark_kind));
+      const startMark =
+        lineInCourse.find((e) => e.mark.mark_kind === "start_finish" || e.mark.mark_kind === "start_line")?.mark
+        ?? marks.find((m) => m.mark_kind === "start_finish" || m.mark_kind === "start_line");
+      const finishMark =
+        lineInCourse.findLast?.((e) => e.mark.mark_kind === "start_finish" || e.mark.mark_kind === "finish_line")?.mark
+        ?? lineInCourse.find((e) => e.mark.mark_kind === "start_finish" || e.mark.mark_kind === "finish_line")?.mark
+        ?? marks.find((m) => m.mark_kind === "start_finish" || m.mark_kind === "finish_line");
+
+      const startCenter = startMark ? lineCenter(startMark) : null;
+      const finishCenter = finishMark ? lineCenter(finishMark) : null;
+
+      // Draw all line marks referenced by the course (A, B, and center S/F marker)
+      const shownLineIds = new Set<string>();
+      const sfLineFeatures: GeoJSON.Feature[] = [];
+
+      for (const lm of lineInCourse) {
+        if (shownLineIds.has(lm.mark.id)) continue;
+        shownLineIds.add(lm.mark.id);
+        const m = lm.mark;
+        if (m.lat2 == null || m.lon2 == null) continue;
+
+        for (const [lng, lat, lbl, ttl] of [
+          [m.lon,  m.lat,  "A", `${m.name} — end A`],
+          [m.lon2, m.lat2, "B", `${m.name} — end B`],
+        ] as [number, number, string, string][]) {
+          addMarker(
+            markerEl(`width:22px;height:22px;border-radius:50%;border:3px solid #3b82f6;background:#0a101fcc;color:#3b82f6;display:flex;align-items:center;justify-content:center;font:700 8px ui-monospace,monospace;box-shadow:0 0 0 2px #00000055;cursor:default;`, lbl, ttl),
+            lng, lat, ttl,
+          );
+        }
+        sfLineFeatures.push({ type: "Feature", geometry: { type: "LineString", coordinates: [[m.lon, m.lat], [m.lon2, m.lat2]] }, properties: {} });
+      }
+
+      // If no line mark is in the course sequence, show the club's start mark
+      if (shownLineIds.size === 0 && startMark && startMark.lat2 != null && startMark.lon2 != null) {
+        for (const [lng, lat, lbl, ttl] of [
+          [startMark.lon,  startMark.lat,  "A", `${startMark.name} — end A`],
+          [startMark.lon2, startMark.lat2, "B", `${startMark.name} — end B`],
+        ] as [number, number, string, string][]) {
+          addMarker(
+            markerEl(`width:22px;height:22px;border-radius:50%;border:3px solid #3b82f6;background:#0a101fcc;color:#3b82f6;display:flex;align-items:center;justify-content:center;font:700 8px ui-monospace,monospace;box-shadow:0 0 0 2px #00000055;cursor:default;`, lbl, ttl),
+            lng, lat, ttl,
+          );
+        }
+        sfLineFeatures.push({ type: "Feature", geometry: { type: "LineString", coordinates: [[startMark.lon, startMark.lat], [startMark.lon2, startMark.lat2]] }, properties: {} });
+      }
+      sfSrc.setData({ type: "FeatureCollection", features: sfLineFeatures });
+
+      // S/F center marker (larger, glowing)
+      if (startCenter) {
+        addMarker(
+          markerEl(`width:32px;height:32px;border-radius:50%;border:3px solid #3b82f6;background:#0a101fcc;color:#3b82f6;display:flex;align-items:center;justify-content:center;font:700 8px ui-monospace,monospace;box-shadow:0 0 0 2px #00000055,0 0 0 5px #3b82f622;cursor:default;`, "S/F", startMark?.name ?? "Start / Finish"),
+          startCenter.lon, startCenter.lat, "Start / Finish",
+        );
+      }
+
+      // Rounding marks: labelled with All-Marks short labels, coloured by tack
+      const roundingResolved = resolved.filter((e) => !isLineMark(e.mark.mark_kind));
+      roundingResolved.forEach(({ name, tack, firstLapOnly, mark }) => {
         const color = TACK_COLOR[tack];
-        lats.push(mark.lat); lons.push(mark.lon);
-        const el = document.createElement("div");
-        el.title = name;
-        el.style.cssText = [
-          `width:26px;height:26px;border-radius:50%;`,
-          `border:3px solid ${color};background:#0a101fcc;color:${color};`,
-          `display:flex;align-items:center;justify-content:center;`,
-          `font:700 9px ui-monospace,monospace;`,
-          `box-shadow:0 0 0 2px #00000055;cursor:default;`,
-          firstLapOnly ? "opacity:0.65;" : "",
-        ].join("");
-        el.textContent = String(i + 1);
-        const marker = new mapboxgl.Marker({ element: el })
-          .setLngLat([mark.lon, mark.lat])
-          .setPopup(
-            new mapboxgl.Popup({ offset: 15, closeButton: false }).setText(
-              `${i + 1}. ${name} — ${tack === "P" ? "Port" : "Starboard"}${firstLapOnly ? " (1st lap)" : ""}`,
-            ),
-          )
-          .addTo(map);
-        markersRef.current.push(marker);
+        const lbl = markDisplayProps(mark).label;
+        addMarker(
+          markerEl([
+            `width:26px;height:26px;border-radius:50%;`,
+            `border:3px solid ${color};background:#0a101fcc;color:${color};`,
+            `display:flex;align-items:center;justify-content:center;`,
+            `font:700 9px ui-monospace,monospace;`,
+            `box-shadow:0 0 0 2px #00000055;cursor:default;`,
+            firstLapOnly ? "opacity:0.65;" : "",
+          ].join(""), lbl, name),
+          mark.lon, mark.lat,
+          `${name} — ${tack === "P" ? "Port" : "Starboard"}${firstLapOnly ? " (1st lap)" : ""}`,
+        );
       });
 
-      // Course line:
-      //  - Always starts at sfCenter (1st leg)
-      //  - preamble marks → sequence marks
-      //  - If cross_sf_each_lap: closes at sfCenter (each lap ends at the line)
-      //  - Otherwise: closes at first sequence mark (laps loop without crossing the line)
-      const seqResolved = resolved.filter((e) => !e.firstLapOnly);
+      // Course line: startCenter → rounding marks → close
+      const startCoord: [number, number] | null = startCenter ? [startCenter.lon, startCenter.lat] : null;
+      const finishCoord: [number, number] | null = finishCenter ? [finishCenter.lon, finishCenter.lat] : null;
+      const seqRounding = roundingResolved.filter((e) => !e.firstLapOnly);
       const routeCoords: [number, number][] = [];
-      if (sfCenter) routeCoords.push([sfCenter.lon, sfCenter.lat]);
-      routeCoords.push(...resolved.map((e) => [e.mark.lon, e.mark.lat] as [number, number]));
+      if (startCoord) routeCoords.push(startCoord);
+      routeCoords.push(...roundingResolved.map((e) => [e.mark.lon, e.mark.lat] as [number, number]));
       const crossSfEachLap = (course as { cross_sf_each_lap?: boolean }).cross_sf_each_lap ?? false;
       if (crossSfEachLap) {
-        if (sfCenter) routeCoords.push([sfCenter.lon, sfCenter.lat]);
-      } else if (seqResolved.length > 0) {
-        // Close lap: last mark → first sequence mark (without crossing S/F)
-        routeCoords.push([seqResolved[0].mark.lon, seqResolved[0].mark.lat]);
+        if (finishCoord) routeCoords.push(finishCoord);
+      } else if (seqRounding.length > 0) {
+        routeCoords.push([seqRounding[0].mark.lon, seqRounding[0].mark.lat]);
+      } else if (finishCoord) {
+        routeCoords.push(finishCoord);
       }
 
-      if (routeCoords.length >= 2) {
-        map.addSource(COURSE_LINE_ID, {
-          type: "geojson",
-          data: { type: "Feature", geometry: { type: "LineString", coordinates: routeCoords }, properties: {} },
-        });
-        map.addLayer({ id: `${COURSE_LINE_ID}-glow`, type: "line", source: COURSE_LINE_ID, paint: { "line-color": "#ffffff", "line-width": 8, "line-opacity": 0.12 } });
-        map.addLayer({ id: COURSE_LINE_ID, type: "line", source: COURSE_LINE_ID, paint: { "line-color": "#ffffff", "line-width": 2, "line-opacity": 0.65, "line-dasharray": [3, 2] } });
-      }
+      courseSrc.setData(
+        routeCoords.length >= 2
+          ? { type: "Feature", geometry: { type: "LineString", coordinates: routeCoords }, properties: {} }
+          : EMPTY_FC,
+      );
     }
 
     // Fit/fly to visible marks whenever selection changes

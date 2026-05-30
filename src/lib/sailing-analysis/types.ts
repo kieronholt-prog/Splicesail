@@ -44,7 +44,12 @@ export type SubmissionStatus =
 
 export type TrackSource = "strava" | "upload";
 
-export type SailingMarkKind = "fixed" | "laid" | "start_finish";
+export type SailingMarkKind = "fixed" | "laid" | "start_finish" | "start_line" | "finish_line";
+
+/** True for any two-ended line mark (start, finish, or combined). */
+export function isLineMark(kind: SailingMarkKind): boolean {
+  return kind === "start_finish" || kind === "start_line" || kind === "finish_line";
+}
 
 export type SailingMarkRow = {
   id: string;

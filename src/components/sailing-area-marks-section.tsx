@@ -4,7 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { deleteSailingMarkAction, saveSailingMarkAction } from "@/app/actions/club-sailing-area";
 import { MarkEditMap, type EditPoint } from "@/components/sailing-analysis/mark-edit-map";
 import { DEFAULT_MAP_CENTER, markBadgeLabel } from "@/lib/sailing-analysis/map-display";
-import type { SailingMarkKind } from "@/lib/sailing-analysis/types";
+import { isLineMark, type SailingMarkKind } from "@/lib/sailing-analysis/types";
 
 export type SailingMarkVm = {
   id: string;
@@ -42,7 +42,7 @@ const MARK_GROUPS: MarkGroup[] = [
   {
     key: "start_finish",
     label: "Start / Finish Lines",
-    filter: (m) => m.mark_kind === "start_finish",
+    filter: (m) => isLineMark(m.mark_kind),
   },
   {
     key: "pile_buoy",
@@ -143,7 +143,7 @@ function CollapsibleMarkGroup({
 }
 
 export function markDisplayProps(m: SailingMarkVm): { color: string; label: string } {
-  if (m.mark_kind === "start_finish") return { color: "#3b82f6", label: markBadgeLabel(m.name) };
+  if (isLineMark(m.mark_kind)) return { color: "#3b82f6", label: markBadgeLabel(m.name) };
   if (m.mark_kind === "laid") return { color: "#f97316", label: markBadgeLabel(m.name) };
 
   // Numbered pile / buoy — show number only and apply lateral-mark colours
@@ -240,7 +240,7 @@ function MarkEditModal({
   const [latB, setLatB] = useState(fmt(existing?.lat2 ?? (existing?.lat ?? fallbackCenter.lat) + 0.0008));
   const [lonB, setLonB] = useState(fmt(existing?.lon2 ?? (existing?.lon ?? fallbackCenter.lon) + 0.0012));
 
-  const isStartFinish = kind === "start_finish";
+  const isLineMarkKind = isLineMark(kind);
 
   useEffect(() => {
     function onEsc(e: KeyboardEvent) {
@@ -259,11 +259,11 @@ function MarkEditModal({
         id: "A",
         lat: aLat,
         lon: aLon,
-        label: isStartFinish ? "A" : kind === "fixed" ? "F" : "L",
-        color: isStartFinish ? END_A_COLOR : kind === "fixed" ? FIXED_COLOR : LAID_COLOR,
+        label: isLineMarkKind ? "A" : kind === "fixed" ? "F" : "L",
+        color: isLineMarkKind ? END_A_COLOR : kind === "fixed" ? FIXED_COLOR : LAID_COLOR,
       });
     }
-    if (isStartFinish) {
+    if (isLineMarkKind) {
       const bLat = parseFloat(latB);
       const bLon = parseFloat(lonB);
       if (Number.isFinite(bLat) && Number.isFinite(bLon)) {
@@ -271,7 +271,7 @@ function MarkEditModal({
       }
     }
     return out;
-  }, [latA, lonA, latB, lonB, isStartFinish, kind]);
+  }, [latA, lonA, latB, lonB, isLineMarkKind, kind]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handlePointMove(id: string, lat: number, lon: number) {
     if (id === "A") {
@@ -343,20 +343,22 @@ function MarkEditModal({
               >
                 <option value="laid">Laid</option>
                 <option value="fixed">Fixed</option>
-                <option value="start_finish">Start/Finish line</option>
+                <option value="start_finish">Start / Finish line</option>
+                <option value="start_line">Start line only</option>
+                <option value="finish_line">Finish line only</option>
               </select>
             </label>
           </div>
 
           <p className="text-xs text-splice-ocean dark:text-splice-water">
-            {isStartFinish
+            {isLineMarkKind
               ? "Drag each line end on the map, or type its coordinates — the map and the boxes stay in sync."
               : "Drag the mark on the map, or type its coordinates — the map and the boxes stay in sync."}
           </p>
 
           <MarkEditMap points={points} onPointMove={handlePointMove} />
 
-          {isStartFinish ? (
+          {isLineMarkKind ? (
             <div className="space-y-3">
               <fieldset className="rounded-lg border border-splice-sky p-3 dark:border-splice-ocean">
                 <legend className="px-1 text-xs font-semibold" style={{ color: END_A_COLOR }}>

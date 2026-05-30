@@ -66,19 +66,23 @@ export async function saveSailingMarkAction(formData: FormData) {
   const lon = Number(formData.get("lon"));
   const rawKind = String(formData.get("mark_kind") ?? "laid");
   const markKind =
-    rawKind === "fixed" ? "fixed" : rawKind === "start_finish" ? "start_finish" : "laid";
+    rawKind === "fixed" ? "fixed" :
+    rawKind === "start_finish" ? "start_finish" :
+    rawKind === "start_line" ? "start_line" :
+    rawKind === "finish_line" ? "finish_line" :
+    "laid";
 
-  const isStartFinish = markKind === "start_finish";
-  const lat2 = isStartFinish ? Number(formData.get("lat2")) : null;
-  const lon2 = isStartFinish ? Number(formData.get("lon2")) : null;
+  const isLineKind = markKind === "start_finish" || markKind === "start_line" || markKind === "finish_line";
+  const lat2 = isLineKind ? Number(formData.get("lat2")) : null;
+  const lon2 = isLineKind ? Number(formData.get("lon2")) : null;
 
   const baseInvalid = !groupId || !name || !Number.isFinite(lat) || !Number.isFinite(lon);
-  const endBInvalid = isStartFinish && (!Number.isFinite(lat2) || !Number.isFinite(lon2));
+  const endBInvalid = isLineKind && (!Number.isFinite(lat2) || !Number.isFinite(lon2));
   if (baseInvalid || endBInvalid) {
     redirect(
       `/groups/${groupId}/club-admin/sailing-area?error=` +
         encodeURIComponent(
-          isStartFinish ? "Both ends of the start/finish line are required." : "Invalid mark fields.",
+          isLineKind ? "Both ends of the start/finish line are required." : "Invalid mark fields.",
         ),
     );
   }
@@ -90,8 +94,8 @@ export async function saveSailingMarkAction(formData: FormData) {
     name,
     lat,
     lon,
-    lat2: isStartFinish ? lat2 : null,
-    lon2: isStartFinish ? lon2 : null,
+    lat2: isLineKind ? lat2 : null,
+    lon2: isLineKind ? lon2 : null,
     mark_kind: markKind,
     description: String(formData.get("description") ?? "").trim() || null,
     updated_at: new Date().toISOString(),

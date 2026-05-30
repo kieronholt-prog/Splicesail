@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { deleteSailingCourseAction, saveSailingCourseAction } from "@/app/actions/club-sailing-area";
-import type { SailingCourseRow } from "@/lib/sailing-analysis/types";
+import { isLineMark, type SailingCourseRow } from "@/lib/sailing-analysis/types";
 import type { SailingMarkVm } from "@/components/sailing-area-marks-section";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -270,6 +270,21 @@ export function CourseDetailPanel({
         </div>
       </div>
 
+      {/* Validation: first mark must be a start line, last must be a finish line */}
+      {!editing && savedEntries.length > 0 && (() => {
+        const firstKind = byName.get(savedEntries[0].name)?.mark_kind;
+        const lastKind = byName.get(savedEntries[savedEntries.length - 1].name)?.mark_kind;
+        const firstOk = firstKind && (firstKind === "start_finish" || firstKind === "start_line");
+        const lastOk = lastKind && (lastKind === "start_finish" || lastKind === "finish_line");
+        if (firstOk && lastOk) return null;
+        return (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800 dark:border-amber-800/40 dark:bg-amber-900/20 dark:text-amber-300">
+            {!firstOk && "First mark should be a Start or Start/Finish line. "}
+            {!lastOk && "Last mark should be a Finish or Start/Finish line."}
+          </p>
+        );
+      })()}
+
       {/* Saved mark sequence (always visible) */}
       {!editing && (
         <div className="flex flex-wrap items-baseline gap-x-1 gap-y-0.5">
@@ -279,9 +294,11 @@ export function CourseDetailPanel({
             </span>
           ) : (
             savedEntries.map((e, i) => {
-              const isSF = byName.get(e.name)?.mark_kind === "start_finish";
-              const color = isSF ? "#3b82f6" : TACK_COLOR[e.tack];
-              const display = e.firstLapOnly ? e.name.toLowerCase() : e.name;
+              const markKind = byName.get(e.name)?.mark_kind;
+              const isLine = markKind ? isLineMark(markKind) : false;
+              const color = isLine ? "#3b82f6" : TACK_COLOR[e.tack];
+              // Line marks always keep their name; only non-line 1st-lap marks go lowercase
+              const display = (e.firstLapOnly && !isLine) ? e.name.toLowerCase() : e.name;
               return (
                 <span
                   key={i}
