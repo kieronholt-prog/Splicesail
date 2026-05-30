@@ -44,13 +44,18 @@ export type SubmissionStatus =
 
 export type TrackSource = "strava" | "upload";
 
+export type SailingMarkKind = "fixed" | "laid" | "start_finish";
+
 export type SailingMarkRow = {
   id: string;
   group_id: string;
   name: string;
   lat: number;
   lon: number;
-  mark_kind: "fixed" | "laid";
+  /** Second end (line end B) for start_finish marks; null for single marks. */
+  lat2: number | null;
+  lon2: number | null;
+  mark_kind: SailingMarkKind;
   chart_ref: string | null;
   description: string | null;
   sort_order: number;
@@ -64,5 +69,6 @@ export type SailingCourseRow = {
   course_type: "SC" | "MC" | "LC" | "custom";
   mark_sequence: [string, "P" | "S"][];
   marks_preamble: [string, "P" | "S"][];
+  cross_sf_each_lap: boolean;
   sort_order: number;
 };

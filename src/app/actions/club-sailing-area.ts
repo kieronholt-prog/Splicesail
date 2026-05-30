@@ -64,10 +64,23 @@ export async function saveSailingMarkAction(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const lat = Number(formData.get("lat"));
   const lon = Number(formData.get("lon"));
-  const markKind = String(formData.get("mark_kind") ?? "laid") as "fixed" | "laid";
+  const rawKind = String(formData.get("mark_kind") ?? "laid");
+  const markKind =
+    rawKind === "fixed" ? "fixed" : rawKind === "start_finish" ? "start_finish" : "laid";
 
-  if (!groupId || !name || !Number.isFinite(lat) || !Number.isFinite(lon)) {
-    redirect(`/groups/${groupId}/club-admin/sailing-area?error=` + encodeURIComponent("Invalid mark fields."));
+  const isStartFinish = markKind === "start_finish";
+  const lat2 = isStartFinish ? Number(formData.get("lat2")) : null;
+  const lon2 = isStartFinish ? Number(formData.get("lon2")) : null;
+
+  const baseInvalid = !groupId || !name || !Number.isFinite(lat) || !Number.isFinite(lon);
+  const endBInvalid = isStartFinish && (!Number.isFinite(lat2) || !Number.isFinite(lon2));
+  if (baseInvalid || endBInvalid) {
+    redirect(
+      `/groups/${groupId}/club-admin/sailing-area?error=` +
+        encodeURIComponent(
+          isStartFinish ? "Both ends of the start/finish line are required." : "Invalid mark fields.",
+        ),
+    );
   }
 
   const { supabase } = await requireClubAdmin(groupId);
@@ -77,7 +90,9 @@ export async function saveSailingMarkAction(formData: FormData) {
     name,
     lat,
     lon,
-    mark_kind: markKind === "fixed" ? "fixed" : "laid",
+    lat2: isStartFinish ? lat2 : null,
+    lon2: isStartFinish ? lon2 : null,
+    mark_kind: markKind,
     description: String(formData.get("description") ?? "").trim() || null,
     updated_at: new Date().toISOString(),
   };
@@ -109,6 +124,7 @@ export async function saveSailingCourseAction(formData: FormData) {
   const courseType = String(formData.get("course_type") ?? "SC");
   const markSequenceRaw = String(formData.get("mark_sequence") ?? "[]");
   const preambleRaw = String(formData.get("marks_preamble") ?? "[]");
+  const crossSfEachLap = formData.get("cross_sf_each_lap") === "on";
 
   let mark_sequence: unknown = [];
   let marks_preamble: unknown = [];
@@ -128,6 +144,7 @@ export async function saveSailingCourseAction(formData: FormData) {
     course_type: courseType,
     mark_sequence,
     marks_preamble,
+    cross_sf_each_lap: crossSfEachLap,
     updated_at: new Date().toISOString(),
   };
 
