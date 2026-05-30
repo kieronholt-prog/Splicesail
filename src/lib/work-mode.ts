@@ -64,6 +64,25 @@ function isRaceOfficerPath(pathname: string): boolean {
   return false;
 }
 
+/** Whether a stored path is safe to reopen when switching into the given work mode. */
+export function pathBelongsToWorkMode(pathname: string, mode: WorkMode): boolean {
+  if (!pathname.startsWith("/")) return false;
+  const staff = staffRouteWorkMode(pathname);
+  switch (mode) {
+    case "admin":
+      return staff === "admin";
+    case "race_officer":
+      return staff === "race_officer";
+    default:
+      return staff === null;
+  }
+}
+
+export function resolveWorkModeSwitchHref(mode: WorkMode, lastPath?: string | null): string {
+  if (lastPath && pathBelongsToWorkMode(lastPath, mode)) return lastPath;
+  return workModeHomeHref(mode);
+}
+
 export function cycleWorkMode(current: WorkMode, availableModes: WorkMode[]): WorkMode {
   const idx = availableModes.indexOf(current);
   const nextIdx = idx < 0 ? 0 : (idx + 1) % availableModes.length;

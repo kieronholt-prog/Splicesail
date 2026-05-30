@@ -1,15 +1,13 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import {
   WORK_MODE_COOKIE,
   parseWorkModeCookie,
-  workModeHomeHref,
   type WorkMode,
 } from "@/lib/work-mode";
 
-export async function setWorkModeAction(formData: FormData) {
+export async function setWorkModeAction(formData: FormData): Promise<{ mode: WorkMode }> {
   const targetRaw = formData.get("target");
   const availableRaw = formData.get("available");
 
@@ -27,5 +25,5 @@ export async function setWorkModeAction(formData: FormData) {
     sameSite: "lax",
   });
 
-  redirect(workModeHomeHref(next));
+  return { mode: next };
 }

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import type { SupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -10,17 +11,17 @@ import {
   type WorkModeCapabilities,
 } from "@/lib/work-mode";
 
-export async function fetchStaffMemberships(
-  supabase: SupabaseServerClient,
-  userId: string,
-): Promise<{ role: string }[]> {
-  const { data } = await supabase
-    .from("group_memberships")
-    .select("role")
-    .eq("user_id", userId)
-    .in("role", ["club_admin", "race_officer"]);
-  return data ?? [];
-}
+/** One staff-role query per RSC request (layout + pages share via React cache()). */
+export const fetchStaffMemberships = cache(
+  async (supabase: SupabaseServerClient, userId: string): Promise<{ role: string }[]> => {
+    const { data } = await supabase
+      .from("group_memberships")
+      .select("role")
+      .eq("user_id", userId)
+      .in("role", ["club_admin", "race_officer"]);
+    return data ?? [];
+  },
+);
 
 export async function readWorkModeForUser(
   userId: string | null,
