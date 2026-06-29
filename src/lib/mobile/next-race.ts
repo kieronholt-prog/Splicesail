@@ -6,6 +6,7 @@ import {
 import { fleetStartUtcMs, homeFeaturedRaceVisibleUntilMs } from "@/lib/tally-window";
 import { clubTodayYmd, clubWallYmdFromUtcMs, resolveClubIanaTimeZone } from "@/lib/club-time";
 import { formatClubHmFromIso } from "@/lib/club-display-format";
+import { fleetStartSignalUtcMs } from "@/lib/resolve-fleet-start-signal";
 
 const HOME_RACE_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -20,6 +21,8 @@ export type MobileTallyBoatRow = {
   outcome: string | null;
   fleetOffsetMinutes: number;
   fleetStartDisplay: string;
+  fleetStartUtc: string;
+  fleetStartSource: "start_signal_at" | "scheduled_offset";
   canTallyAfloat: boolean;
   canTallyAshore: boolean;
 };
@@ -202,7 +205,7 @@ export async function loadMobileNextRace(
   const clubTz = resolveClubIanaTimeZone(groupObj?.iana_timezone);
   const boatIds = [...(signupBoatIdsBySeriesId.get(race.series_id) ?? [])];
 
-  const [{ data: boats }, { data: entries }, fleetMatches] = await Promise.all([
+  const [{ data: boats }, { data: entries }, fleetMatches, { data: fleetRows }] = await Promise.all([
     supabase
       .from("boats")
       .select("id, label, default_sail_number, rya_class_key, boat_classes:rya_class_key ( display_name )")
@@ -221,7 +224,13 @@ export async function loadMobileNextRace(
         seriesId: race.series_id,
       })),
     ),
+    supabase
+      .from("race_fleets")
+      .select("id, start_signal_at, start_offset_minutes")
+      .eq("race_id", race.id),
   ]);
+
+  const fleetById = new Map((fleetRows ?? []).map((f) => [f.id as string, f] as const));
 
   const entryByBoat = new Map(
     (entries ?? []).map((e) => [e.boat_id as string, e] as const),
@@ -231,8 +240,14 @@ export async function loadMobileNextRace(
     const entry = entryByBoat.get(b.id);
     const match = fleetMatches.get(`${race.id}\u0000${b.id}`);
     const fleetOff = match?.offsetMinutes ?? 0;
-    const fleetStartMs = fleetStartUtcMs(race.scheduled_at, fleetOff);
-    const fleetStartDisplay = formatClubHmFromIso(new Date(fleetStartMs).toISOString(), clubTz);
+    const fleetRow = match?.fleetId ? fleetById.get(match.fleetId) : null;
+    const fleetStartMs =
+      fleetStartSignalUtcMs(race.scheduled_at, fleetRow ?? { start_offset_minutes: fleetOff }) ??
+      fleetStartUtcMs(race.scheduled_at, fleetOff);
+    const fleetStartUtc = new Date(fleetStartMs).toISOString();
+    const fleetStartSource: "start_signal_at" | "scheduled_offset" =
+      fleetRow?.start_signal_at ? "start_signal_at" : "scheduled_offset";
+    const fleetStartDisplay = formatClubHmFromIso(fleetStartUtc, clubTz);
 
     const classNest = b.boat_classes;
     const classRow = Array.isArray(classNest) ? classNest[0] : classNest;
@@ -255,6 +270,8 @@ export async function loadMobileNextRace(
       outcome: (entry?.outcome as string | null) ?? null,
       fleetOffsetMinutes: fleetOff,
       fleetStartDisplay,
+      fleetStartUtc,
+      fleetStartSource,
       canTallyAfloat: nowMs < fleetStartMs && !tallyAfloatAt,
       canTallyAshore: nowMs >= fleetStartMs && !tallyAshoreAt,
     };

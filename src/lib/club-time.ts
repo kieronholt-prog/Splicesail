@@ -16,8 +16,8 @@ export {
   zonedDatetimeLocalToUtcIso,
 };
 
-/** Normalised IANA id; invalid or empty values fall back to UTC. */
-export const DEFAULT_CLUB_IANA_TIMEZONE = "UTC";
+/** Normalised IANA id; invalid or empty values fall back to Europe/London (primary Splice market). */
+export const DEFAULT_CLUB_IANA_TIMEZONE = "Europe/London";
 
 export function resolveClubIanaTimeZone(raw: string | null | undefined): string {
   const t = typeof raw === "string" ? raw.trim() : "";

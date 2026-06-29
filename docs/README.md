@@ -8,6 +8,13 @@
 | [member-onboarding.md](./member-onboarding.md) | Joining clubs, adding members, series signup prerequisites |
 | [race-types.md](./race-types.md) | Handicap vs level rated vs pursuit — generator, RO, tally |
 | [development.md](./development.md) | Local setup, env vars, scripts, migrations, debugging |
+| [sailing-performance-rules.md](./sailing-performance-rules.md) | Phone, watch, Android architecture and sailing domain rules |
+| [sailing-analysis.md](./sailing-analysis.md) | GPS track analysis (Sailstats), collated fleet analysis |
+| [track-session-v2.md](./track-session-v2.md) | Phone/watch session recording, merge, countdown sync (V2) |
+
+## Mobile apps
+
+See [`../apps/README.md`](../apps/README.md) for iOS and Garmin watch projects.
 
 ## Where to start
 
