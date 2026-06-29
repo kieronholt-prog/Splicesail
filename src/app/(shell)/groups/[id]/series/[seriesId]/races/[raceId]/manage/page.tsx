@@ -99,7 +99,7 @@ export default async function RaceManagePage({ params, searchParams }: Props) {
   const { data: fleetRows } = await supabase
     .from("race_fleets")
     .select(
-      "id, name, start_offset_minutes, start_signal_at, sort_order, flag_mode, ics_signal, flag_image_url, group_fleet_id",
+      "id, name, start_offset_minutes, start_signal_at, start_postponed_at, sort_order, flag_mode, ics_signal, flag_image_url, group_fleet_id",
     )
     .eq("race_id", raceId)
     .order("sort_order", { ascending: true });
@@ -124,6 +124,7 @@ export default async function RaceManagePage({ params, searchParams }: Props) {
           name: r.name,
           startOffsetMinutes: r.start_offset_minutes ?? 0,
           startSignalAtIso: r.start_signal_at ?? null,
+          startPostponedAtIso: r.start_postponed_at ?? null,
           flagMode: (r.flag_mode === "image_url" ? "image_url" : "ics") as "ics" | "image_url",
           icsSignal: r.ics_signal ?? null,
           flagImageUrl: r.flag_image_url ?? null,

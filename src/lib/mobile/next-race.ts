@@ -27,6 +27,7 @@ export type MobileTallyBoatRow = {
   canTallyAfloat: boolean;
   canTallyAshore: boolean;
   canUndoTallyAfloat: boolean;
+  fleetStartPostponed: boolean;
 };
 
 export type MobileNextRacePayload = {
@@ -228,7 +229,7 @@ export async function loadMobileNextRace(
     ),
     supabase
       .from("race_fleets")
-      .select("id, start_signal_at, start_offset_minutes")
+      .select("id, start_signal_at, start_offset_minutes, start_postponed_at")
       .eq("race_id", race.id),
   ]);
 
@@ -252,6 +253,8 @@ export async function loadMobileNextRace(
         ? "start_signal_at"
         : "scheduled_offset";
     const fleetStartDisplay = formatClubHmFromIso(fleetStartUtc, clubTz);
+
+    const fleetStartPostponed = Boolean(fleetRow?.start_postponed_at);
 
     const classNest = b.boat_classes;
     const classRow = Array.isArray(classNest) ? classNest[0] : classNest;
@@ -279,6 +282,7 @@ export async function loadMobileNextRace(
       canTallyAfloat: nowMs < fleetStartMs && !tallyAfloatAt,
       canTallyAshore: nowMs >= fleetStartMs && !tallyAshoreAt,
       canUndoTallyAfloat: nowMs < fleetStartMs && !!tallyAfloatAt && !tallyAshoreAt,
+      fleetStartPostponed,
     };
   });
 

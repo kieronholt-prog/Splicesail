@@ -100,3 +100,57 @@ export async function updateRaceFleetStartSignalAction(input: {
 
   return { ok: true };
 }
+
+/** RO AP postponement — persisted so phone/watch can show start postponed. */
+export async function setRaceFleetStartPostponedAction(input: {
+  group_id: string;
+  series_id: string;
+  race_id: string;
+  fleet_id: string;
+  postponed: boolean;
+}): Promise<{ ok: true; postponed_at_iso: string | null } | { error: string }> {
+  const groupId = String(input.group_id ?? "").trim();
+  const seriesId = String(input.series_id ?? "").trim();
+  const raceId = String(input.race_id ?? "").trim();
+  const fleetId = String(input.fleet_id ?? "").trim();
+
+  if (!groupId || !seriesId || !raceId || !fleetId) {
+    return { error: "Missing race or fleet context." };
+  }
+
+  const { supabase, user } = await getServerAuth();
+  if (!user) return { error: "Not signed in." };
+
+  const staff = await requireStaff(supabase, groupId, user.id);
+  if ("error" in staff) return staff;
+
+  const { data: race } = await supabase
+    .from("races")
+    .select("id, series_id, series:series_id ( group_id )")
+    .eq("id", raceId)
+    .maybeSingle();
+
+  if (!race || race.series_id !== seriesId) {
+    return { error: "Race not found." };
+  }
+
+  const seriesNest = race.series as { group_id?: string } | { group_id?: string }[] | null;
+  const seriesRow = Array.isArray(seriesNest) ? seriesNest[0] : seriesNest;
+  if (!seriesRow?.group_id || seriesRow.group_id !== groupId) {
+    return { error: "Series not found for this club." };
+  }
+
+  const postponedAtIso = input.postponed ? new Date().toISOString() : null;
+
+  const { error } = await supabase
+    .from("race_fleets")
+    .update({ start_postponed_at: postponedAtIso })
+    .eq("id", fleetId)
+    .eq("race_id", raceId);
+
+  if (error) return { error: error.message };
+
+  revalidateRaceStartViews(groupId, seriesId, raceId);
+
+  return { ok: true, postponed_at_iso: postponedAtIso };
+}

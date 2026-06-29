@@ -21,7 +21,7 @@ import {
 import { postponementDownShiftMinutes, startSequenceLabel } from "@/lib/series-start-sequence";
 import { MarineSignalFlagImg } from "@/components/marine-signal-flag-img";
 import { InfoHint } from "@/components/ui/info-hint";
-import { updateRaceFleetStartSignalAction } from "@/app/actions/ro-race-start";
+import { updateRaceFleetStartSignalAction, setRaceFleetStartPostponedAction } from "@/app/actions/ro-race-start";
 import { dispatchRoPrimaryStartSaved } from "@/lib/ro-race-start-events";
 import { formatClubClockDdMmmYyyyHm } from "@/lib/club-display-format";
 import { wallTimeMs } from "@/lib/wall-time";
@@ -33,6 +33,8 @@ export type RoFleetStartRow = {
   startOffsetMinutes: number;
   /** RO-amended fleet start from DB; when set, overrides schedule + offset for this fleet. */
   startSignalAtIso?: string | null;
+  /** When set, RO has hoisted AP — countdown frozen for this fleet. */
+  startPostponedAtIso?: string | null;
   flagMode: "ics" | "image_url";
   icsSignal: string | null;
   flagImageUrl: string | null;
@@ -402,7 +404,7 @@ export function RoFleetStartSignalsPanel({
       fleets
         .map(
           (x) =>
-            `${x.id}:${x.startOffsetMinutes}:${x.startSignalAtIso ?? ""}:${x.flagMode}:${x.icsSignal ?? ""}:${x.flagImageUrl ?? ""}:${x.clubClassFlag ?? ""}`,
+            `${x.id}:${x.startOffsetMinutes}:${x.startSignalAtIso ?? ""}:${x.startPostponedAtIso ?? ""}:${x.flagMode}:${x.icsSignal ?? ""}:${x.flagImageUrl ?? ""}:${x.clubClassFlag ?? ""}`,
         )
         .join("|"),
     [fleets],
@@ -430,6 +432,27 @@ export function RoFleetStartSignalsPanel({
         }
       } finally {
         setSavingFleetId(null);
+      }
+    },
+    [groupId, seriesId, raceId],
+  );
+
+  const persistFleetPostponed = useCallback(
+    async (fleetId: string, postponed: boolean) => {
+      setPersistError(null);
+      try {
+        const res = await setRaceFleetStartPostponedAction({
+          group_id: groupId,
+          series_id: seriesId,
+          race_id: raceId,
+          fleet_id: fleetId,
+          postponed,
+        });
+        if ("error" in res) {
+          setPersistError(res.error);
+        }
+      } catch {
+        setPersistError("Could not save postponement.");
       }
     },
     [groupId, seriesId, raceId],
@@ -510,7 +533,14 @@ export function RoFleetStartSignalsPanel({
     const p = loadPersisted(raceId);
     const nextTargets = buildInitialTargets(scheduledAtIso, fleets);
     setTargets(nextTargets);
-    setPausedAt(p?.pausedAt && typeof p.pausedAt === "object" ? { ...p.pausedAt } : {});
+    const pausedFromDb: Record<string, number> = {};
+    for (const f of fleets) {
+      if (!f.startPostponedAtIso) continue;
+      const ms = new Date(f.startPostponedAtIso).getTime();
+      if (Number.isFinite(ms)) pausedFromDb[f.id] = ms;
+    }
+    const localPaused = p?.pausedAt && typeof p.pausedAt === "object" ? { ...p.pausedAt } : {};
+    setPausedAt({ ...localPaused, ...pausedFromDb });
     setRecallRestart(p?.recallRestart && typeof p.recallRestart === "object" ? { ...p.recallRestart } : {});
     const drafts: Record<string, string> = {};
     for (const id of Object.keys(nextTargets)) {
@@ -743,7 +773,10 @@ export function RoFleetStartSignalsPanel({
                   {!paused && isFuture && !recall ? (
                     <button
                       type="button"
-                      onClick={() => setPausedAt((p) => ({ ...p, [tid]: now }))}
+                      onClick={() => {
+                        setPausedAt((prev) => ({ ...prev, [tid]: now }));
+                        void persistFleetPostponed(tid, true);
+                      }}
                       className="rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-950 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-100"
                     >
                       Postpone
