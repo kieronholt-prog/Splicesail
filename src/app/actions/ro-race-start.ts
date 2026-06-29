@@ -3,6 +3,7 @@
 import { applyRaceFleetStartSignal } from "@/lib/sync-race-fleet-start";
 import { getServerAuth } from "@/lib/supabase/auth-cache";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 
 function managePath(groupId: string, seriesId: string, raceId: string) {
   return `/groups/${groupId}/series/${seriesId}/races/${raceId}/manage`;
@@ -13,10 +14,13 @@ function seriesPath(groupId: string, seriesId: string) {
 }
 
 function revalidateRaceStartViews(groupId: string, seriesId: string, raceId: string) {
-  revalidatePath(seriesPath(groupId, seriesId));
+  // Keep the RO manage page cache fresh; defer broader invalidation so Apply returns quickly.
   revalidatePath(managePath(groupId, seriesId, raceId));
-  revalidatePath(`/groups/${groupId}/series/${seriesId}/races/${raceId}/finishes`);
-  revalidatePath("/");
+  after(() => {
+    revalidatePath(seriesPath(groupId, seriesId));
+    revalidatePath(`/groups/${groupId}/series/${seriesId}/races/${raceId}/finishes`);
+    revalidatePath("/");
+  });
 }
 
 async function requireStaff(
@@ -70,7 +74,7 @@ export async function updateRaceFleetStartSignalAction(input: {
 
   const { data: race } = await supabase
     .from("races")
-    .select("id, series_id")
+    .select("id, series_id, series:series_id ( group_id )")
     .eq("id", raceId)
     .maybeSingle();
 
@@ -78,13 +82,9 @@ export async function updateRaceFleetStartSignalAction(input: {
     return { error: "Race not found." };
   }
 
-  const { data: series } = await supabase
-    .from("series")
-    .select("group_id")
-    .eq("id", seriesId)
-    .maybeSingle();
-
-  if (!series || series.group_id !== groupId) {
+  const seriesNest = race.series as { group_id?: string } | { group_id?: string }[] | null;
+  const seriesRow = Array.isArray(seriesNest) ? seriesNest[0] : seriesNest;
+  if (!seriesRow?.group_id || seriesRow.group_id !== groupId) {
     return { error: "Series not found for this club." };
   }
 

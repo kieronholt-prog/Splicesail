@@ -18,9 +18,9 @@ import { postponementDownShiftMinutes, startSequenceLabel } from "@/lib/series-s
 import { MarineSignalFlagImg } from "@/components/marine-signal-flag-img";
 import { InfoHint } from "@/components/ui/info-hint";
 import { updateRaceFleetStartSignalAction } from "@/app/actions/ro-race-start";
+import { dispatchRoPrimaryStartSaved } from "@/lib/ro-race-start-events";
 import { formatClubClockDdMmmYyyyHm } from "@/lib/club-display-format";
 import { wallTimeMs } from "@/lib/wall-time";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type RoFleetStartRow = {
@@ -349,7 +349,6 @@ export function RoFleetStartSignalsPanel({
   startSequenceCode,
   fleets,
 }: Props) {
-  const router = useRouter();
   const baseMs = useMemo(() => new Date(scheduledAtIso).getTime(), [scheduledAtIso]);
   const raceDayYmd = useMemo(() => {
     if (!Number.isFinite(baseMs)) return "";
@@ -370,6 +369,7 @@ export function RoFleetStartSignalsPanel({
   const [hmDraft, setHmDraft] = useState<Record<string, string>>({});
   const [hmError, setHmError] = useState<Record<string, string>>({});
   const [persistError, setPersistError] = useState<string | null>(null);
+  const [savingFleetId, setSavingFleetId] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
   /** Drives countdown beeps at 250ms so last-10s ticks are not missed when display `now` is 1Hz. */
   const [audioTick, setAudioTick] = useState(0);
@@ -393,22 +393,30 @@ export function RoFleetStartSignalsPanel({
   );
 
   const persistFleetStart = useCallback(
-    async (fleetId: string, ms: number) => {
+    async (fleetId: string, ms: number, isPrimaryFleet: boolean) => {
       setPersistError(null);
-      const res = await updateRaceFleetStartSignalAction({
-        group_id: groupId,
-        series_id: seriesId,
-        race_id: raceId,
-        fleet_id: fleetId,
-        start_at_iso: new Date(ms).toISOString(),
-      });
-      if ("error" in res) {
-        setPersistError(res.error);
-        return;
+      setSavingFleetId(fleetId);
+      try {
+        const startAtIso = new Date(ms).toISOString();
+        const res = await updateRaceFleetStartSignalAction({
+          group_id: groupId,
+          series_id: seriesId,
+          race_id: raceId,
+          fleet_id: fleetId,
+          start_at_iso: startAtIso,
+        });
+        if ("error" in res) {
+          setPersistError(res.error);
+          return;
+        }
+        if (isPrimaryFleet) {
+          dispatchRoPrimaryStartSaved(startAtIso);
+        }
+      } finally {
+        setSavingFleetId(null);
       }
-      router.refresh();
     },
-    [groupId, seriesId, raceId, router],
+    [groupId, seriesId, raceId],
   );
 
   useEffect(() => {
@@ -554,7 +562,7 @@ export function RoFleetStartSignalsPanel({
       return n;
     });
     setHmDraft((prev) => ({ ...prev, [recallFleetId]: utcMsToClubWallHm(ms, displayTimeZone) }));
-    void persistFleetStart(recallFleetId, ms);
+    void persistFleetStart(recallFleetId, ms, fleets[0]?.id === recallFleetId);
     setRecallError(null);
     recallDialogRef.current?.close();
     setRecallFleetId(null);
@@ -580,7 +588,7 @@ export function RoFleetStartSignalsPanel({
       return n;
     });
     setRecallRestart((prev) => ({ ...prev, [fleetId]: false }));
-    void persistFleetStart(fleetId, ms);
+    void persistFleetStart(fleetId, ms, fleets[0]?.id === fleetId);
   };
 
   if (!Number.isFinite(baseMs) || fleets.length === 0) {
@@ -679,9 +687,10 @@ export function RoFleetStartSignalsPanel({
                   <button
                     type="button"
                     onClick={() => applyHm(tid)}
-                    className="rounded border border-splice-water bg-splice-foam px-2 py-0.5 text-[10px] font-medium text-splice-navy dark:border-splice-ocean dark:bg-splice-navy-light dark:text-splice-foam"
+                    disabled={savingFleetId === tid}
+                    className="rounded border border-splice-water bg-splice-foam px-2 py-0.5 text-[10px] font-medium text-splice-navy disabled:opacity-60 dark:border-splice-ocean dark:bg-splice-navy-light dark:text-splice-foam"
                   >
-                    Apply
+                    {savingFleetId === tid ? "Saving…" : "Apply"}
                   </button>
                   {fleetIndex === 0 ? (
                     <InfoHint label="About Apply">
@@ -733,7 +742,7 @@ export function RoFleetStartSignalsPanel({
                           return n;
                         });
                         setHmDraft((d) => ({ ...d, [tid]: utcMsToClubWallHm(nextT, displayTimeZone) }));
-                        void persistFleetStart(tid, nextT);
+                        void persistFleetStart(tid, nextT, fleetIndex === 0);
                       }}
                       className="rounded bg-splice-navy px-2 py-0.5 text-[10px] font-medium text-white dark:bg-splice-foam dark:text-splice-navy"
                     >

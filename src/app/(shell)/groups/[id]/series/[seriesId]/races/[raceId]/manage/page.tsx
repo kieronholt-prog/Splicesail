@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { RaceManageScheduleHeader } from "@/components/race-manage-schedule-header";
 import { RoFleetStartSignalsPanel } from "@/components/ro-fleet-start-signals-panel";
 import { RoRacePresenceButtons, type RoPresenceEntryRow } from "@/components/ro-race-presence-buttons";
 import { RoPursuitStartRollingList, type PursuitStartSlotView } from "@/components/ro-pursuit-start-rolling-list";
 import { InfoHint } from "@/components/ui/info-hint";
-import { formatClubDdMmmYyyyFromIso, formatClubHmFromIso } from "@/lib/club-display-format";
 import { RO_RACE_LINE_NAV_ACTIVE_CLASS, RO_RACE_LINE_NAV_LINK_CLASS } from "@/lib/ro-race-line-nav";
 import { resolveClubIanaTimeZone } from "@/lib/club-time";
 import { loadPursuitSlotsForRace } from "@/lib/pursuit-slots-server";
@@ -505,17 +505,12 @@ export default async function RaceManagePage({ params, searchParams }: Props) {
           <h1 className="mt-2 text-2xl font-semibold tracking-tight text-splice-navy dark:text-splice-surface">
             Manage race · {race.name}
           </h1>
-          <p className="mt-2 text-xs text-splice-blue dark:text-splice-water">
-            {group?.name ?? "Club"}
-            {" · "}Race day{" "}
-            <strong className="tabular-nums text-splice-ocean dark:text-splice-water">
-              {formatClubDdMmmYyyyFromIso(race.scheduled_at, clubTz)}
-            </strong>
-            {" · "}Start{" "}
-            <strong className="tabular-nums text-splice-ocean dark:text-splice-water">
-              {formatClubHmFromIso(race.scheduled_at, clubTz)}
-            </strong>
-          </p>
+          <RaceManageScheduleHeader
+            raceId={raceId}
+            initialScheduledAtIso={race.scheduled_at}
+            clubTz={clubTz}
+            clubName={group?.name ?? "Club"}
+          />
           {race.results_final ? (
             <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950 dark:bg-amber-950/35 dark:text-amber-100">
               Results marked final — check before changing line outcomes.
