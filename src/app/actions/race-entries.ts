@@ -3,12 +3,11 @@
 import { crewTemplateFromForm } from "@/lib/boat-crew";
 import { fleetMatchByRaceBoat } from "@/lib/race-boat-fleet-start-offset";
 import { fleetStartUtcMs } from "@/lib/tally-window";
+import { bumpTally as bumpTallyCore } from "@/lib/tally/bump-tally";
 import { createClient } from "@/lib/supabase/server";
 import { getServerAuth } from "@/lib/supabase/auth-cache";
-import { boatLinkedToSeriesSignup } from "@/lib/series-registration-boats";
 import {
   isRoOnlyFinishOutcome,
-  isSailorDeclarationOutcome,
 } from "@/lib/finish-outcome-labels";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -193,166 +192,23 @@ async function bumpTally(
   const seriesId = String(formData.get("series_id") ?? "").trim();
   const raceId = String(formData.get("race_id") ?? "").trim();
   const boatIdForm = String(formData.get("boat_id") ?? "").trim();
-
-  if (!groupId || !seriesId || !raceId) {
-    return { ok: false, error: "Missing race context." };
-  }
-
-  if (!boatIdForm) {
-    return {
-      ok: false,
-      error:
-        which === "afloat"
-          ? "Choose which hull you are tallying — one button per boat on Home."
-          : "Missing hull on tally — reload Home and try again.",
-    };
-  }
+  const outcomeRaw =
+    which === "ashore" ? String(formData.get("outcome") ?? "").trim() : undefined;
 
   const { supabase, user } = await getServerAuth();
   if (!user) redirect("/login");
 
-  const outcomeRaw =
-    which === "ashore" ? String(formData.get("outcome") ?? "").trim() : "";
-
-  const ctx = { groupId, seriesId };
-
-  const [raceCtx, existingEntryResult, linked] = await Promise.all([
-    loadRaceGroupContext(supabase, raceId, seriesId, groupId),
-    supabase
-      .from("race_entries")
-      .select("id, fleet_id, tally_afloat_at, tally_ashore_at, boat_id, outcome")
-      .eq("race_id", raceId)
-      .eq("user_id", user.id)
-      .eq("boat_id", boatIdForm)
-      .maybeSingle(),
-    boatLinkedToSeriesSignup(supabase, {
-      seriesId,
-      userId: user.id,
-      boatId: boatIdForm,
-    }),
-  ]);
-
-  if (!raceCtx.ok) return raceCtx;
-  if (!linked) {
-    return { ok: false, error: "That hull is not on your series signup for this fixture." };
-  }
-
-  const existingEntryForBoat = existingEntryResult.data;
-
-  const fleetCtx = await resolveTallyFleetContext(
-    supabase,
+  const result = await bumpTallyCore(supabase, {
+    groupId,
+    seriesId,
     raceId,
-    boatIdForm,
-    ctx,
-    existingEntryForBoat?.fleet_id ?? null,
-  );
+    boatId: boatIdForm,
+    userId: user.id,
+    which,
+    outcome: outcomeRaw,
+  });
 
-  const fleetStartMs = fleetStartUtcMs(raceCtx.scheduledAt, fleetCtx.offsetMinutes);
-  const nowMs = Date.now();
-
-  if (which === "afloat") {
-    if (nowMs >= fleetStartMs) {
-      return {
-        ok: false,
-        error: "Tally afloat is only available until your fleet start (race signal plus fleet offset).",
-      };
-    }
-  } else if (nowMs < fleetStartMs) {
-    return {
-      ok: false,
-      error: "Tally ashore and declaration open from your fleet start onward.",
-    };
-  }
-
-  if (which === "ashore") {
-    if (!outcomeRaw.length) {
-      return { ok: false, error: "Choose a declaration." };
-    }
-
-    const priorOutcome =
-      existingEntryForBoat?.outcome != null
-        ? String(existingEntryForBoat.outcome).toLowerCase()
-        : null;
-    const priorRoOutcome =
-      priorOutcome && isRoOnlyFinishOutcome(priorOutcome) ? priorOutcome : null;
-
-    if (priorRoOutcome) {
-      if (outcomeRaw !== priorRoOutcome) {
-        return {
-          ok: false,
-          error: `The race officer recorded ${priorRoOutcome.toUpperCase()} for this entry — tally ashore only to confirm.`,
-        };
-      }
-    } else if (isRoOnlyFinishOutcome(outcomeRaw)) {
-      return {
-        ok: false,
-        error: `${outcomeRaw.toUpperCase()} is recorded by the race officer — you cannot declare it yourself here.`,
-      };
-    } else if (!isSailorDeclarationOutcome(outcomeRaw)) {
-      return { ok: false, error: "Invalid finish status for tally ashore." };
-    }
-  }
-
-  const nowIso = new Date().toISOString();
-
-  if (which === "afloat") {
-    if (existingEntryForBoat?.tally_afloat_at) {
-      return {
-        ok: false,
-        error: "You have already tallied afloat for this hull — use undo on Home to change.",
-      };
-    }
-
-    const fleetId = fleetCtx.fleetId;
-
-    if (!existingEntryForBoat) {
-      const { error } = await supabase.from("race_entries").insert({
-        race_id: raceId,
-        user_id: user.id,
-        boat_id: boatIdForm,
-        tally_afloat_at: nowIso,
-        fleet_id: fleetId,
-      });
-      if (error) return { ok: false, error: error.message };
-    } else {
-      const { error } = await supabase
-        .from("race_entries")
-        .update({ tally_afloat_at: nowIso, fleet_id: fleetId })
-        .eq("id", existingEntryForBoat.id);
-      if (error) return { ok: false, error: error.message };
-    }
-
-    tallyRevalidateHome();
-    return { ok: true };
-  }
-
-  const basePatch = {
-    tally_ashore_at: nowIso,
-    outcome: outcomeRaw.length ? outcomeRaw : null,
-  };
-
-  if (!existingEntryForBoat) {
-    const fleetId = fleetCtx.fleetId;
-    const { error: insErr } = await supabase.from("race_entries").insert({
-      race_id: raceId,
-      user_id: user.id,
-      boat_id: boatIdForm,
-      fleet_id: fleetId,
-      ...basePatch,
-    });
-
-    if (insErr) return { ok: false, error: insErr.message };
-
-    tallyRevalidateHome();
-    return { ok: true };
-  }
-
-  const { error: ashErr } = await supabase
-    .from("race_entries")
-    .update(basePatch)
-    .eq("id", existingEntryForBoat.id);
-
-  if (ashErr) return { ok: false, error: ashErr.message };
+  if (!result.ok) return result;
 
   tallyRevalidateHome();
   return { ok: true };

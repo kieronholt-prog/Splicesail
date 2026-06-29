@@ -17,6 +17,7 @@ function isExemptPath(pathname: string): boolean {
   if (pathname === "/health" || pathname.startsWith("/health/")) return true;
   if (pathname === "/api/health" || pathname.startsWith("/api/health/")) return true;
   if (pathname === "/api/club-approval") return true;
+  if (pathname === "/api/mobile" || pathname.startsWith("/api/mobile/")) return true;
   return false;
 }
 

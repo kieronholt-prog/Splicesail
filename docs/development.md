@@ -27,7 +27,7 @@ Optional:
 | `SPLICE_CLUB_APPROVAL_SECRET` | HMAC secret for signed approve/reject links (random string) |
 | `RESEND_API_KEY` | [Resend](https://resend.com) API key for transactional email |
 | `RESEND_FROM_EMAIL` | Verified sender, e.g. `Splice <notify@splicesail.com>` |
-| `SPLICE_UNDER_DEVELOPMENT` | Set to `1` to show an under-development page on all routes (except health probes and club-approval email links) |
+| `SPLICE_UNDER_DEVELOPMENT` | Set to `1` to show an under-development page on all routes (except health probes, club-approval email links, and `/api/mobile/*` for the iOS app) |
 | `SPLICE_UNDER_DEVELOPMENT_BYPASS` | Optional secret; open `/under-development?bypass=SECRET` once to set a 7-day bypass cookie for testing |
 
 **Public club results** (`/results/[slug]`) use the anon key with RLS (`20261623120000_public_results_anon_rls.sql`). The club must have a **slug** set on `groups`.
