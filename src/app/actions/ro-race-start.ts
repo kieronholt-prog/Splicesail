@@ -29,11 +29,13 @@ async function deferFinishRecomputeIfNeeded(supabase: SupabaseClient, raceId: st
   await supabase.rpc("recompute_race_guest_finishes_timing_for_race", { p_race_id: raceId });
 }
 
+type StaffResult = { ok: true } | { ok: false; error: string };
+
 async function requireStaff(
   supabase: Awaited<ReturnType<typeof getServerAuth>>["supabase"],
   groupId: string,
   userId: string,
-) {
+): Promise<StaffResult> {
   const { data: m } = await supabase
     .from("group_memberships")
     .select("role")
@@ -41,9 +43,9 @@ async function requireStaff(
     .eq("user_id", userId)
     .maybeSingle();
   if (m?.role !== "club_admin" && m?.role !== "race_officer") {
-    return { error: "Only club admins and race officers can update start signals." as const };
+    return { ok: false, error: "Only club admins and race officers can update start signals." };
   }
-  return { ok: true as const };
+  return { ok: true };
 }
 
 /**
@@ -76,7 +78,7 @@ export async function updateRaceFleetStartSignalAction(input: {
   if (!user) return { error: "Not signed in." };
 
   const staff = await requireStaff(supabase, groupId, user.id);
-  if ("error" in staff) return staff;
+  if (!staff.ok) return { error: staff.error };
 
   const { data: race } = await supabase
     .from("races")
@@ -130,7 +132,7 @@ export async function setRaceFleetStartPostponedAction(input: {
   if (!user) return { error: "Not signed in." };
 
   const staff = await requireStaff(supabase, groupId, user.id);
-  if ("error" in staff) return staff;
+  if (!staff.ok) return { error: staff.error };
 
   const { data: race } = await supabase
     .from("races")
