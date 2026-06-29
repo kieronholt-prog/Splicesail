@@ -50,8 +50,106 @@ npm run db:generate-rya-class-seed   # builds RYA class seed data (see scripts/)
 - Location: **`supabase/migrations/`**
 - Filenames are timestamp-prefixed; **preserve ordering** for greenfield and production.
 - After changing schema, regenerate types if your workflow uses them (add tooling if not present).
+- **Never edit migrations already applied in production** — add a new timestamped file instead (see `AGENTS.md`).
 
-Apply locally with your usual Supabase CLI workflow (e.g. `supabase db push`).
+Apply to a linked remote project with the Supabase CLI:
+
+```bash
+cd ~/Projects/splice
+supabase db push
+```
+
+### Production migrations (Supabase)
+
+Use this checklist when schema changes need to reach the live database (e.g. **RaceManager** on splicesail.com). **No Vercel redeploy** is required for SQL-only changes — only the database must be updated.
+
+**Prerequisites**
+
+- [Supabase CLI](https://supabase.com/docs/guides/cli) installed (`supabase --version`)
+- Repo checked out at `~/Projects/splice`
+- Database password from **Dashboard → Project Settings → Database**
+
+**Linked project**
+
+| Field | Value |
+|-------|--------|
+| Name | RaceManager |
+| Project ref | `vmkrdhxsxeexnipbpnjm` |
+
+Link once (or re-link after cloning):
+
+```bash
+cd ~/Projects/splice
+supabase link --project-ref vmkrdhxsxeexnipbpnjm
+```
+
+**Apply pending migrations (preferred)**
+
+```bash
+cd ~/Projects/splice
+supabase db push
+```
+
+Review the listed SQL files, confirm when prompted. Each file under `supabase/migrations/` runs in timestamp order.
+
+**Commit after applying**
+
+Keep git in sync with production so the next `db push` does not drift:
+
+```bash
+git add supabase/migrations/<new-file>.sql
+git commit -m "Describe why the schema changed"
+git push
+```
+
+**Verify a constraint or column**
+
+Dashboard → **SQL Editor**, or:
+
+```bash
+supabase db execute --linked 'select conname, pg_get_constraintdef(oid) from pg_constraint where conrelid = '\''public.race_fleets'\''::regclass and conname = '\''race_fleets_start_offset_minutes_check'\'';'
+```
+
+**Dashboard fallback (no CLI)**
+
+1. Dashboard → project **RaceManager** → **SQL Editor → New query**
+2. Paste the contents of the migration file from `supabase/migrations/`
+3. **Run** — expect “Success. No rows returned” for DDL
+
+If you apply SQL manually, record it so CLI history stays aligned:
+
+```bash
+supabase migration repair --status applied <migration_timestamp>
+```
+
+Example: `supabase migration repair --status applied 20261716120000`
+
+#### Example: `race_fleets_start_offset_minutes_check`
+
+RO fleet start signals call `apply_race_fleet_start_signal`, which recalculates `race_fleets.start_offset_minutes` from signal times. Pursuit or widely spaced fleets can exceed the original **0–60 minute** check, producing:
+
+```text
+new row for relation "race_fleets" violates check constraint "race_fleets_start_offset_minutes_check"
+```
+
+Until fixed, RO start updates fail and **`fleetStartUtc` does not update** for the phone app countdown.
+
+| | |
+|--|--|
+| Migration file | `supabase/migrations/20261716120000_race_fleet_offset_max_240.sql` |
+| Change | Widens check from **0–60** to **0–240** minutes |
+| Apply | `supabase db push` |
+| After apply | Retry RO start signal on web → refresh Race tab on phone → countdown should arm |
+
+**Quick cheat sheet**
+
+| Step | Action |
+|------|--------|
+| Go to repo | `cd ~/Projects/splice` |
+| Apply | `supabase db push` |
+| Project ref | `vmkrdhxsxeexnipbpnjm` |
+| Password | Dashboard → Project Settings → Database |
+| Commit | Add new `.sql` under `supabase/migrations/` and push to git |
 
 ## Project layout
 

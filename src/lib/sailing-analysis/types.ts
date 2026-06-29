@@ -66,6 +66,14 @@ export type SailingMarkRow = {
   sort_order: number;
 };
 
+export type CourseMarkOverride = {
+  lat: number;
+  lon: number;
+  lat2?: number;
+  lon2?: number;
+  mark_kind?: string; // present for virtual marks not in the global catalogue
+};
+
 export type SailingCourseRow = {
   id: string;
   group_id: string;
@@ -76,4 +84,5 @@ export type SailingCourseRow = {
   marks_preamble: [string, "P" | "S"][];
   cross_sf_each_lap: boolean;
   sort_order: number;
+  course_mark_overrides: Record<string, CourseMarkOverride>;
 };

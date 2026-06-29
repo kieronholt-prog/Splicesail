@@ -128,13 +128,16 @@ export async function saveSailingCourseAction(formData: FormData) {
   const courseType = String(formData.get("course_type") ?? "SC");
   const markSequenceRaw = String(formData.get("mark_sequence") ?? "[]");
   const preambleRaw = String(formData.get("marks_preamble") ?? "[]");
+  const overridesRaw = String(formData.get("course_mark_overrides") ?? "{}");
   const crossSfEachLap = formData.get("cross_sf_each_lap") === "on";
 
   let mark_sequence: unknown = [];
   let marks_preamble: unknown = [];
+  let course_mark_overrides: unknown = {};
   try {
     mark_sequence = JSON.parse(markSequenceRaw);
     marks_preamble = JSON.parse(preambleRaw);
+    course_mark_overrides = JSON.parse(overridesRaw);
   } catch {
     redirect(`/groups/${groupId}/club-admin/sailing-area?error=` + encodeURIComponent("Invalid course JSON."));
   }
@@ -149,6 +152,7 @@ export async function saveSailingCourseAction(formData: FormData) {
     mark_sequence,
     marks_preamble,
     cross_sf_each_lap: crossSfEachLap,
+    course_mark_overrides,
     updated_at: new Date().toISOString(),
   };
 
@@ -159,7 +163,8 @@ export async function saveSailingCourseAction(formData: FormData) {
   }
 
   revalidatePath(`/groups/${groupId}/club-admin/sailing-area`);
-  redirect(`/groups/${groupId}/club-admin/sailing-area?course_saved=1`);
+  const selectedParam = courseId ? `&selected=${encodeURIComponent(courseId)}` : "";
+  redirect(`/groups/${groupId}/club-admin/sailing-area?course_saved=1${selectedParam}`);
 }
 
 export async function deleteSailingCourseAction(formData: FormData) {

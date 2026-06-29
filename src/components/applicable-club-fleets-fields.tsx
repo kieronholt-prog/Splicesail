@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { InfoHint } from "@/components/ui/info-hint";
+import { MAX_RACE_FLEET_START_OFFSET_MINUTES } from "@/lib/race-fleet-offset-limits";
 
 /** Shared form fields: select club fleets + start offset (minutes after first start). */
 export function ApplicableClubFleetsFields({
@@ -83,7 +84,7 @@ export function ApplicableClubFleetsFields({
                   type="number"
                   name={`fleet_start_offset_${f.id}`}
                   min={0}
-                  max={60}
+                  max={MAX_RACE_FLEET_START_OFFSET_MINUTES}
                   defaultValue={offsetDefault}
                   className="w-14 rounded-lg border border-splice-water bg-white px-1.5 py-1 text-sm tabular-nums text-splice-navy dark:border-splice-ocean dark:bg-splice-navy dark:text-splice-foam"
                   title="Minutes after first fleet start"

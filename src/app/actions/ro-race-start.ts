@@ -1,6 +1,7 @@
 "use server";
 
 import { applyRaceFleetStartSignal } from "@/lib/sync-race-fleet-start";
+import { isPlausibleRaceInstantMs, plausibleRaceInstantError } from "@/lib/plausible-race-instant";
 import { getServerAuth } from "@/lib/supabase/auth-cache";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
@@ -62,8 +63,8 @@ export async function updateRaceFleetStartSignalAction(input: {
   }
 
   const startMs = new Date(startAtIso).getTime();
-  if (!Number.isFinite(startMs)) {
-    return { error: "Invalid start time." };
+  if (!isPlausibleRaceInstantMs(startMs)) {
+    return { error: plausibleRaceInstantError() };
   }
 
   const { supabase, user } = await getServerAuth();

@@ -1,9 +1,8 @@
 "use server";
 
 import { crewTemplateFromForm } from "@/lib/boat-crew";
-import { fleetMatchByRaceBoat } from "@/lib/race-boat-fleet-start-offset";
-import { fleetStartUtcMs } from "@/lib/tally-window";
 import { bumpTally as bumpTallyCore } from "@/lib/tally/bump-tally";
+import { undoTallyAfloat as undoTallyAfloatCore } from "@/lib/tally/undo-tally-afloat";
 import { createClient } from "@/lib/supabase/server";
 import { getServerAuth } from "@/lib/supabase/auth-cache";
 import {
@@ -68,43 +67,6 @@ async function loadRaceGroupContext(
   return { ok: true, scheduledAt: race.scheduled_at, seriesId: race.series_id };
 }
 
-type TallyFleetContext = { offsetMinutes: number; fleetId: string | null };
-
-async function resolveTallyFleetContext(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  raceId: string,
-  boatId: string,
-  ctx: { groupId: string; seriesId: string },
-  existingFleetId: string | null,
-): Promise<TallyFleetContext> {
-  const matchKey = `${raceId}\u0000${boatId}`;
-  const matchPromise = fleetMatchByRaceBoat(supabase, [
-    { raceId, boatId, groupId: ctx.groupId, seriesId: ctx.seriesId },
-  ]);
-
-  if (existingFleetId) {
-    const [{ data: rf }, matches] = await Promise.all([
-      supabase
-        .from("race_fleets")
-        .select("start_offset_minutes")
-        .eq("id", existingFleetId)
-        .eq("race_id", raceId)
-        .maybeSingle(),
-      matchPromise,
-    ]);
-    const match = matches.get(matchKey);
-    const offsetMinutes =
-      rf?.start_offset_minutes != null && Number.isFinite(Number(rf.start_offset_minutes))
-        ? Number(rf.start_offset_minutes)
-        : (match?.offsetMinutes ?? 0);
-    return { offsetMinutes, fleetId: match?.fleetId ?? existingFleetId };
-  }
-
-  const matches = await matchPromise;
-  const match = matches.get(matchKey);
-  return { offsetMinutes: match?.offsetMinutes ?? 0, fleetId: match?.fleetId ?? null };
-}
-
 export async function tallyAfloatAction(formData: FormData): Promise<TallyActionResult> {
   return bumpTally(formData, "afloat");
 }
@@ -126,59 +88,18 @@ export async function undoTallyAfloatAction(formData: FormData): Promise<TallyAc
   const { supabase, user } = await getServerAuth();
   if (!user) redirect("/login");
 
-  const [raceCtx, entryResult, entryGate] = await Promise.all([
-    loadRaceGroupContext(supabase, raceId, seriesId, groupId),
-    supabase
-      .from("race_entries")
-      .select("id, tally_afloat_at, tally_ashore_at, fleet_id, outcome")
-      .eq("race_id", raceId)
-      .eq("user_id", user.id)
-      .eq("boat_id", boatIdForm)
-      .maybeSingle(),
-    requireOwnRaceEntry(supabase, raceId, user.id),
-  ]);
-
+  const entryGate = await requireOwnRaceEntry(supabase, raceId, user.id);
   if (entryGate) return entryGate;
-  if (!raceCtx.ok) return raceCtx;
 
-  const entryRow = entryResult.data;
-  if (!entryRow?.tally_afloat_at) {
-    return { ok: false, error: "Nothing to undo for that hull." };
-  }
-  if (entryRow.tally_ashore_at) {
-    return {
-      ok: false,
-      error: "Tally afloat can't be undone after tally ashore has been recorded for that hull.",
-    };
-  }
-
-  const fleetCtx = await resolveTallyFleetContext(
-    supabase,
+  const result = await undoTallyAfloatCore(supabase, {
+    groupId,
+    seriesId,
     raceId,
-    boatIdForm,
-    { groupId, seriesId },
-    entryRow.fleet_id,
-  );
+    boatId: boatIdForm,
+    userId: user.id,
+  });
 
-  const fleetStartMs = fleetStartUtcMs(raceCtx.scheduledAt, fleetCtx.offsetMinutes);
-  if (Date.now() >= fleetStartMs) {
-    return { ok: false, error: "Undo tally afloat is only available before your fleet start." };
-  }
-
-  const preserveOcs =
-    entryRow.outcome != null && String(entryRow.outcome).toLowerCase() === "ocs";
-
-  const { error } = await supabase
-    .from("race_entries")
-    .update({
-      tally_afloat_at: null,
-      tally_ashore_at: null,
-      outcome: preserveOcs ? "ocs" : null,
-      fleet_id: null,
-    })
-    .eq("id", entryRow.id);
-
-  if (error) return { ok: false, error: error.message };
+  if (!result.ok) return result;
 
   tallyRevalidateHome();
   return { ok: true };

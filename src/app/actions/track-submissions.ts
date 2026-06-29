@@ -20,6 +20,7 @@ import {
   DETECTION_DEFAULTS,
 } from "@/lib/sailing-analysis";
 import type { AnalysisMode, MarkOverride } from "@/lib/sailing-analysis/types";
+import { ensureFleetAnalysisSettingsRow } from "@/lib/sailing-analysis/race-fleet-analysis-settings";
 
 function redirectTracks(submissionId: string, query?: string) {
   redirect(`/tracks/${submissionId}${query ? `?${query}` : ""}`);
@@ -301,14 +302,21 @@ export async function setAnalysisModeAction(formData: FormData) {
       );
     }
 
-    await supabase.from("race_analysis_settings").upsert(
-      {
-        race_id: sub.race_id,
-        group_id: sub.group_id,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "race_id" },
-    );
+    const { data: entry } = sub.race_entry_id
+      ? await supabase
+          .from("race_entries")
+          .select("fleet_id")
+          .eq("id", sub.race_entry_id)
+          .maybeSingle()
+      : { data: null };
+
+    if (entry?.fleet_id && sub.race_id) {
+      await ensureFleetAnalysisSettingsRow(supabase, {
+        raceId: sub.race_id,
+        raceFleetId: entry.fleet_id,
+        groupId: sub.group_id,
+      });
+    }
   }
 
   const nextStatus = mode === "standalone" ? "pending_setup" : "pending_ro";

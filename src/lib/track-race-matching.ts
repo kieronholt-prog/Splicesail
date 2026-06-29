@@ -1,8 +1,20 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { formatClubDdMmmHmFromIso } from "@/lib/club-display-format";
 
-const DEFAULT_MAX_RACE_DURATION_MS = 4 * 60 * 60 * 1000;
+/** Latest time after `races.scheduled_at` that still overlaps a GPS track (4 hours). */
+export const TRACK_RACE_MATCH_MAX_DURATION_MS = 4 * 60 * 60 * 1000;
+/** When series has no tally open hours, matching uses this many hours before scheduled start. */
+export const TRACK_RACE_MATCH_DEFAULT_OPEN_HOURS = 2;
+
+const DEFAULT_MAX_RACE_DURATION_MS = TRACK_RACE_MATCH_MAX_DURATION_MS;
 const DEFAULT_CLUB_TIMEZONE = "Europe/London";
+
+/** Human-readable match window for RO/sailor help text. */
+export function describeTrackRaceMatchWindow(openHoursBeforeStart: number): string {
+  const hBefore = openHoursBeforeStart;
+  const hAfter = TRACK_RACE_MATCH_MAX_DURATION_MS / (60 * 60 * 1000);
+  return `${hBefore} hour${hBefore === 1 ? "" : "s"} before the race scheduled start through ${hAfter} hours after it`;
+}
 
 export type RaceMatchCandidate = {
   raceId: string;

@@ -4,7 +4,7 @@ Concise facts for anyone (human or agent) working on this repo. Deep detail live
 
 ## Product
 
-Club dinghy racing **Splice**: multi-tenant **clubs** (`groups`), **members** with roles, **series** and **races**, **race entries** and **finishes**, **Portsmouth Yardstick** scoring, **race-only RO-added** boats (adhoc guest rows), optional **legacy guest** data. Primary users: sailors, club admins, race officers. Three **work modes** (sailor / admin / race officer) change nav and home URLs.
+Club dinghy racing **Splice**: multi-tenant **clubs** (`groups`), **members** with roles, **series** and **races**, **race entries** and **finishes**, **Portsmouth Yardstick** scoring, **race-only RO-added** boats (adhoc guest rows), optional **legacy guest** data. **GPS track analysis** (Sailstats engine). **Mobile:** iOS phone app + Garmin watch (`apps/`). Primary users: sailors, club admins, race officers. Three **work modes** (sailor / admin / race officer) change nav and home URLs.
 
 ## Stack
 
@@ -28,6 +28,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | Joining clubs & members | [`docs/member-onboarding.md`](docs/member-onboarding.md) |
 | Handicap / level rated / pursuit | [`docs/race-types.md`](docs/race-types.md) |
 | Env & tooling | [`docs/development.md`](docs/development.md) |
+| Phone / watch apps | [`apps/README.md`](apps/README.md), [`docs/sailing-performance-rules.md`](docs/sailing-performance-rules.md) |
+| Mobile API (iOS tally) | `src/app/api/mobile/` |
 
 ## Domain rules (don’t contradict these)
 

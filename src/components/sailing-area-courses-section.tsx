@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { deleteSailingCourseAction, saveSailingCourseAction } from "@/app/actions/club-sailing-area";
-import { isLineMark, type SailingCourseRow } from "@/lib/sailing-analysis/types";
+import { isLineMark, type CourseMarkOverride, type SailingCourseRow } from "@/lib/sailing-analysis/types";
 import type { SailingMarkVm } from "@/components/sailing-area-marks-section";
+import { DEFAULT_MAP_CENTER } from "@/lib/sailing-analysis/map-display";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -189,25 +190,43 @@ export function CourseDetailPanel({
   course,
   allMarks,
   groupId,
+  editing,
+  onEditingChange,
+  overrides,
+  onOverridesChange,
+  onEntriesChange,
 }: {
   course: SailingCourseRow;
   allMarks: SailingMarkVm[];
   groupId: string;
+  editing: boolean;
+  onEditingChange: (v: boolean) => void;
+  overrides: Record<string, CourseMarkOverride>;
+  onOverridesChange: (v: Record<string, CourseMarkOverride>) => void;
+  onEntriesChange?: (entries: MarkEntry[]) => void;
 }) {
-  const [editing, setEditing] = useState(false);
   const [entries, setEntries] = useState<MarkEntry[]>(() => courseToEntries(course));
+
+  // Keep parent (and map) in sync with live editing state
+  useEffect(() => {
+    onEntriesChange?.(entries);
+  }, [entries, onEntriesChange]);
   const [crossSfEachLap, setCrossSfEachLap] = useState(course.cross_sf_each_lap ?? false);
   const [addMarkName, setAddMarkName] = useState("");
   const [addTack, setAddTack] = useState<"P" | "S">("S");
+  const [addLocalName, setAddLocalName] = useState("");
+  const [addLocalKind, setAddLocalKind] = useState<"laid" | "start_line" | "finish_line" | "start_finish">("laid");
 
   const byName = useMemo(() => new Map(allMarks.map((m) => [m.name, m])), [allMarks]);
   const savedEntries = useMemo(() => courseToEntries(course), [course]);
   const hasFirstLap = savedEntries.some((e) => e.firstLapOnly);
 
-  // All marks available — marks legitimately appear multiple times in courses
-  // (e.g. PILE 2 in preamble and sequence, LAID MK B twice in Course M)
-  // and start/finish lines must remain addable.
-  const availableNames = useMemo(() => allMarks.map((m) => m.name), [allMarks]);
+  // Global marks + any virtual marks already defined in overrides for this course.
+  const availableNames = useMemo(() => {
+    const global = allMarks.map((m) => m.name);
+    const virtual = Object.keys(overrides).filter((n) => !byName.has(n));
+    return [...global, ...virtual];
+  }, [allMarks, overrides, byName]);
 
   const { mark_sequence, marks_preamble } = useMemo(() => entriesToPayload(entries), [entries]);
 
@@ -225,10 +244,27 @@ export function CourseDetailPanel({
     setAddMarkName("");
   }
 
+  function handleAddLocalMark() {
+    const name = addLocalName.trim().toUpperCase();
+    if (!name) return;
+    const isLine = addLocalKind !== "laid";
+    // Place at map centre; user drags to the correct position on the map.
+    const newOverride: CourseMarkOverride = {
+      lat: DEFAULT_MAP_CENTER[1],
+      lon: DEFAULT_MAP_CENTER[0],
+      mark_kind: addLocalKind,
+      ...(isLine ? { lat2: DEFAULT_MAP_CENTER[1], lon2: DEFAULT_MAP_CENTER[0] + 0.002 } : {}),
+    };
+    onOverridesChange({ ...overrides, [name]: newOverride });
+    setEntries((prev) => [...prev, { name, tack: "S", firstLapOnly: false }]);
+    setAddLocalName("");
+  }
+
   function cancelEdit() {
     setEntries(courseToEntries(course));
     setCrossSfEachLap(course.cross_sf_each_lap ?? false);
-    setEditing(false);
+    onOverridesChange(course.course_mark_overrides ?? {});
+    onEditingChange(false);
   }
 
   return (
@@ -256,7 +292,7 @@ export function CourseDetailPanel({
           ) : (
             <button
               type="button"
-              onClick={() => setEditing(true)}
+              onClick={() => onEditingChange(true)}
               className="rounded-lg border border-splice-water px-3 py-1 text-xs font-medium text-splice-navy dark:border-splice-ocean dark:text-splice-foam"
             >
               Edit
@@ -277,8 +313,10 @@ export function CourseDetailPanel({
 
       {/* Validation: first mark must be a start line, last must be a finish line */}
       {!editing && savedEntries.length > 0 && (() => {
-        const firstKind = byName.get(savedEntries[0].name)?.mark_kind;
-        const lastKind = byName.get(savedEntries[savedEntries.length - 1].name)?.mark_kind;
+        const resolveKind = (name: string) =>
+          byName.get(name)?.mark_kind ?? (course.course_mark_overrides?.[name]?.mark_kind as SailingMarkVm["mark_kind"] | undefined);
+        const firstKind = resolveKind(savedEntries[0].name);
+        const lastKind = resolveKind(savedEntries[savedEntries.length - 1].name);
         const firstOk = firstKind && (firstKind === "start_finish" || firstKind === "start_line");
         const lastOk = lastKind && (lastKind === "start_finish" || lastKind === "finish_line");
         if (firstOk && lastOk) return null;
@@ -384,6 +422,41 @@ export function CourseDetailPanel({
             </button>
           </div>
 
+          {/* Add course-local mark (virtual mark placed on the map for this course only) */}
+          <div className="rounded-lg border border-dashed border-splice-sky px-3 py-2.5 space-y-2 dark:border-splice-ocean">
+            <p className="text-xs font-medium text-splice-navy dark:text-splice-foam">Add course-local mark</p>
+            <p className="text-xs text-splice-ocean dark:text-splice-water">
+              Creates a mark for this course only. Drag it to position on the map. Laid marks from the global list are also draggable in edit mode.
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={addLocalName}
+                onChange={(e) => setAddLocalName(e.target.value)}
+                placeholder="Name e.g. FINISH LINE"
+                className="min-w-0 flex-1 rounded border border-splice-water bg-white px-2 py-1 text-xs dark:border-splice-ocean dark:bg-splice-navy dark:text-splice-foam"
+              />
+              <select
+                value={addLocalKind}
+                onChange={(e) => setAddLocalKind(e.target.value as typeof addLocalKind)}
+                className="rounded border border-splice-water bg-white px-2 py-1 text-xs dark:border-splice-ocean dark:bg-splice-navy dark:text-splice-foam"
+              >
+                <option value="laid">Rounding mark</option>
+                <option value="start_line">Start line</option>
+                <option value="finish_line">Finish line</option>
+                <option value="start_finish">Start/Finish line</option>
+              </select>
+              <button
+                type="button"
+                onClick={handleAddLocalMark}
+                disabled={!addLocalName.trim()}
+                className="shrink-0 rounded-lg border border-splice-navy px-2 py-1 text-xs font-medium text-splice-navy disabled:opacity-40 dark:border-splice-foam dark:text-splice-foam"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+
           {/* Save */}
           <form action={saveSailingCourseAction} className="space-y-3 pt-1">
             <input type="hidden" name="group_id" value={groupId} />
@@ -393,6 +466,7 @@ export function CourseDetailPanel({
             <input type="hidden" name="course_type" value={course.course_type} />
             <input type="hidden" name="mark_sequence" value={JSON.stringify(mark_sequence)} />
             <input type="hidden" name="marks_preamble" value={JSON.stringify(marks_preamble)} />
+            <input type="hidden" name="course_mark_overrides" value={JSON.stringify(overrides)} />
 
             <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-splice-sky px-3 py-2 text-xs dark:border-splice-ocean">
               <input

@@ -11,7 +11,7 @@ Splice embeds the Sailstats analysis engine for post-race GPS insight. Sailors u
 | `/tracks/[id]` | Sailor | Confirm race/boat, choose mode, setup |
 | `/tracks/[id]/analysis` | Sailor | Results when `ready` |
 | `/groups/[id]/club-admin/sailing-area` | Club admin | Marks & courses |
-| `…/races/[raceId]/track-analysis` | RO / admin | Fleet course setup & batch analyse |
+| `…/races/[raceId]/track-analysis` | RO / admin | Per-fleet course/laps/mark setup & analyse collated tracks |
 
 ## Strava
 
@@ -35,7 +35,17 @@ pending_confirm → pending_mode → pending_setup → ready   (standalone)
                               → pending_ro → ready       (collated)
 ```
 
-Collated mode requires `profiles.share_track_for_enhanced_analytics` and at least one club course (non-custom).
+Collated mode requires `profiles.share_track_for_enhanced_analytics` and at least one club course (non-custom). The RO confirms **course letter and laps per race fleet** on the track-analysis page (preset before uploads is supported); mark drag positions are stored in `race_fleet_analysis_settings.mark_overrides`. Submissions must be linked to a race entry with a `fleet_id` so settings resolve correctly.
+
+### Automatic track → race matching
+
+Implemented in [`src/lib/track-race-matching.ts`](../src/lib/track-race-matching.ts):
+
+- **Window start:** `races.scheduled_at` minus the series **`tally_open_hours_before_fleet_start`** (default **2 hours** if unset).
+- **Window end:** `races.scheduled_at` plus **4 hours** (max assumed race length).
+- **Rule:** the Strava/upload activity interval must **overlap** that window by any amount (`overlap > 0`). There is no minimum overlap duration.
+- **Preference:** among qualifying races, one where the sailor already has a `race_entries` row ranks first.
+- Strava import auto-picks the top candidate; sailors can override on `/tracks/[id]` confirm step.
 
 ## Analysis code
 

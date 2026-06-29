@@ -25,6 +25,7 @@ export type MobileTallyBoatRow = {
   fleetStartSource: "start_signal_at" | "scheduled_offset";
   canTallyAfloat: boolean;
   canTallyAshore: boolean;
+  canUndoTallyAfloat: boolean;
 };
 
 export type MobileNextRacePayload = {
@@ -274,6 +275,7 @@ export async function loadMobileNextRace(
       fleetStartSource,
       canTallyAfloat: nowMs < fleetStartMs && !tallyAfloatAt,
       canTallyAshore: nowMs >= fleetStartMs && !tallyAshoreAt,
+      canUndoTallyAfloat: nowMs < fleetStartMs && !!tallyAfloatAt && !tallyAshoreAt,
     };
   });
 
@@ -281,9 +283,9 @@ export async function loadMobileNextRace(
     groupId,
     seriesId: race.series_id,
     raceId: race.id,
-    raceName: race.name,
-    seriesName: (seriesNest as { name: string }).name,
-    clubName: groupObj?.name ?? "Club",
+    raceName: race.name?.trim() || "Race",
+    seriesName: String((seriesNest as { name?: string | null }).name ?? "").trim() || "Series",
+    clubName: groupObj?.name?.trim() || "Club",
     scheduledAt: race.scheduled_at,
     clubTimeZone: clubTz,
     boats: boatRows,

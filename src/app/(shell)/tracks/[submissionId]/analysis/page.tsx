@@ -25,7 +25,7 @@ export default async function TrackAnalysisPage({ params, searchParams }: Props)
   const { data: sub } = await supabase
     .from("race_track_submissions")
     .select(
-      "id, activity_name, status, analysis_mode, race_id, group_id, course_letter, laps, mark_overrides, course_setup, det_settings, track_source, external_activity_id, storage_path",
+      "id, activity_name, status, analysis_mode, race_id, race_entry_id, group_id, course_letter, laps, mark_overrides, course_setup, det_settings, track_source, external_activity_id, storage_path",
     )
     .eq("id", submissionId)
     .eq("user_id", user.id)

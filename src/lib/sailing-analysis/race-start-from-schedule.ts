@@ -32,6 +32,30 @@ export async function resolveRaceStartUtcMs(
   return fleetStartSignalUtcMs(race.scheduled_at, primary);
 }
 
+/** Start signal UTC for a specific race fleet (for per-fleet track analysis). */
+export async function resolveFleetStartUtcMs(
+  supabase: SupabaseClient,
+  raceId: string,
+  raceFleetId: string,
+): Promise<number | null> {
+  const { data: race } = await supabase
+    .from("races")
+    .select("scheduled_at")
+    .eq("id", raceId)
+    .maybeSingle();
+
+  if (!race?.scheduled_at) return null;
+
+  const { data: fleet } = await supabase
+    .from("race_fleets")
+    .select("id, start_signal_at, start_offset_minutes")
+    .eq("id", raceFleetId)
+    .eq("race_id", raceId)
+    .maybeSingle();
+
+  return fleetStartSignalUtcMs(race.scheduled_at, fleet);
+}
+
 export function mergeRaceStartIntoCourseSetup(
   courseSetup: Record<string, unknown>,
   raceStartUtcMs: number | null,

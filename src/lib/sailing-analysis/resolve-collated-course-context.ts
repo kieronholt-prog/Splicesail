@@ -1,9 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MarkOverride } from "./types";
+import { resolveSubmissionRaceFleetId } from "./race-fleet-analysis-settings";
 
 type SubmissionRow = {
   analysis_mode: string | null;
   race_id: string | null;
+  race_entry_id?: string | null;
   course_letter: string | null;
   laps: number | null;
   mark_overrides: unknown;
@@ -11,7 +13,7 @@ type SubmissionRow = {
   det_settings: unknown;
 };
 
-/** Collated sailors inherit RO race settings when submission rows were not backfilled. */
+/** Collated sailors inherit RO per-fleet settings when submission rows were not backfilled. */
 export async function resolveCollatedCourseContext(
   supabase: SupabaseClient,
   sub: SubmissionRow,
@@ -34,10 +36,13 @@ export async function resolveCollatedCourseContext(
     return base;
   }
 
+  const raceFleetId = await resolveSubmissionRaceFleetId(supabase, sub);
+  if (!raceFleetId) return base;
+
   const { data: settings } = await supabase
-    .from("race_analysis_settings")
+    .from("race_fleet_analysis_settings")
     .select("course_letter, laps, mark_overrides, course_setup, det_settings")
-    .eq("race_id", sub.race_id)
+    .eq("race_fleet_id", raceFleetId)
     .maybeSingle();
 
   if (!settings?.course_letter) return base;

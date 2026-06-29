@@ -3,6 +3,7 @@ import {
   loadTrackPointsForSubmission,
   normalizeTrackPoints,
 } from "@/lib/track-points-loader";
+import { resolveSubmissionRaceFleetId } from "@/lib/sailing-analysis/race-fleet-analysis-settings";
 
 export const FLEET_TRACK_PALETTE = [
   "#e879f9",
@@ -27,13 +28,17 @@ export type FleetTrackOverlay = {
 type FleetSubmissionRow = {
   id: string;
   user_id: string;
+  race_entry_id: string | null;
   activity_name: string | null;
   track_source: string;
   external_activity_id: string;
   storage_path: string | null;
   track_points_cache: unknown;
   boat_id: string | null;
-  boats: { default_sail_number: string | null; label: string | null } | { default_sail_number: string | null; label: string | null }[] | null;
+  boats:
+    | { default_sail_number: string | null; label: string | null }
+    | { default_sail_number: string | null; label: string | null }[]
+    | null;
 };
 
 async function resolveFleetTrackPoints(
@@ -59,17 +64,32 @@ async function resolveFleetTrackPoints(
   return [];
 }
 
+function submissionMatchesFleet(
+  subFleetId: string | null,
+  filterFleetId: string | null | undefined,
+): boolean {
+  if (filterFleetId === undefined) return true;
+  return subFleetId === filterFleetId;
+}
+
 export async function loadRaceFleetTracks(
   supabase: SupabaseClient,
   raceId: string,
-  statuses: string[] = ["pending_ro", "ready"],
+  opts?: {
+    statuses?: string[];
+    /** When set, only tracks for entries in this race_fleet (null = no fleet assigned). */
+    raceFleetId?: string | null;
+  },
 ): Promise<FleetTrackOverlay[]> {
+  const statuses = opts?.statuses ?? ["pending_ro", "ready"];
+
   const { data: subs, error } = await supabase
     .from("race_track_submissions")
     .select(
       `
       id,
       user_id,
+      race_entry_id,
       activity_name,
       track_source,
       external_activity_id,
@@ -90,9 +110,13 @@ export async function loadRaceFleetTracks(
   }
 
   const out: FleetTrackOverlay[] = [];
+  let colorIndex = 0;
 
-  for (let i = 0; i < (subs?.length ?? 0); i++) {
-    const sub = subs![i] as FleetSubmissionRow;
+  for (const raw of subs ?? []) {
+    const sub = raw as FleetSubmissionRow;
+    const subFleetId = await resolveSubmissionRaceFleetId(supabase, sub);
+    if (!submissionMatchesFleet(subFleetId, opts?.raceFleetId)) continue;
+
     const points = await resolveFleetTrackPoints(supabase, sub);
     if (points.length < 2) continue;
 
@@ -102,15 +126,41 @@ export async function loadRaceFleetTracks(
     const label =
       sail && boatName
         ? `${sail} · ${boatName}`
-        : sail || boatName || sub.activity_name || `Track ${i + 1}`;
+        : sail || boatName || sub.activity_name || `Track ${colorIndex + 1}`;
 
     out.push({
       id: sub.id,
       label,
-      color: FLEET_TRACK_PALETTE[i % FLEET_TRACK_PALETTE.length],
+      color: FLEET_TRACK_PALETTE[colorIndex % FLEET_TRACK_PALETTE.length],
       points,
     });
+    colorIndex++;
   }
 
   return out;
+}
+
+/** Pending collated submission counts per race_fleet_id (null key = unassigned). */
+export async function countPendingCollatedByFleet(
+  supabase: SupabaseClient,
+  raceId: string,
+): Promise<Map<string | null, number>> {
+  const { data: subs, error } = await supabase
+    .from("race_track_submissions")
+    .select("id, race_entry_id")
+    .eq("race_id", raceId)
+    .eq("analysis_mode", "collated")
+    .eq("status", "pending_ro");
+
+  if (error) {
+    console.error("countPendingCollatedByFleet:", error.message);
+    return new Map();
+  }
+
+  const counts = new Map<string | null, number>();
+  for (const sub of subs ?? []) {
+    const fleetId = await resolveSubmissionRaceFleetId(supabase, sub);
+    counts.set(fleetId, (counts.get(fleetId) ?? 0) + 1);
+  }
+  return counts;
 }

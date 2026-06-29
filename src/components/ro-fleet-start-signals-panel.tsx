@@ -2,9 +2,13 @@
 
 import {
   clubWallHmOnYmdToUtcMs,
-  clubWallYmdFromUtcMs,
   utcMsToClubWallHm,
 } from "@/lib/club-zoned";
+import {
+  isPlausibleRaceInstantMs,
+  plausibleRaceInstantError,
+  resolveRaceDayYmd,
+} from "@/lib/plausible-race-instant";
 import {
   nextStartSequenceMilestone,
   startSequenceMilestonesUtcMs,
@@ -74,23 +78,30 @@ function formatClockNow(epochMs: number, timeZone: string) {
   return formatClubClockDdMmmYyyyHm(epochMs, timeZone);
 }
 
-function buildInitialTargets(scheduledAtIso: string, fleets: RoFleetStartRow[]): Record<string, number> {
+function fleetTargetMs(scheduledAtIso: string, fleet: RoFleetStartRow): number | null {
   const base = new Date(scheduledAtIso).getTime();
-  const out: Record<string, number> = {};
-  if (!Number.isFinite(base)) return out;
-  for (const f of fleets) {
-    if (f.startSignalAtIso) {
-      const amended = new Date(f.startSignalAtIso).getTime();
-      if (Number.isFinite(amended)) {
-        out[f.id] = amended;
-        continue;
-      }
+  const baseOk = isPlausibleRaceInstantMs(base);
+
+  if (fleet.startSignalAtIso) {
+    const amended = new Date(fleet.startSignalAtIso).getTime();
+    if (isPlausibleRaceInstantMs(amended)) {
+      return amended;
     }
-    const off =
-      f.startOffsetMinutes != null && Number.isFinite(Number(f.startOffsetMinutes))
-        ? Number(f.startOffsetMinutes)
-        : 0;
-    out[f.id] = base + off * 60_000;
+  }
+  if (!baseOk) return null;
+  const off =
+    fleet.startOffsetMinutes != null && Number.isFinite(Number(fleet.startOffsetMinutes))
+      ? Number(fleet.startOffsetMinutes)
+      : 0;
+  const ms = base + off * 60_000;
+  return isPlausibleRaceInstantMs(ms) ? ms : null;
+}
+
+function buildInitialTargets(scheduledAtIso: string, fleets: RoFleetStartRow[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const f of fleets) {
+    const ms = fleetTargetMs(scheduledAtIso, f);
+    if (ms != null) out[f.id] = ms;
   }
   return out;
 }
@@ -350,10 +361,15 @@ export function RoFleetStartSignalsPanel({
   fleets,
 }: Props) {
   const baseMs = useMemo(() => new Date(scheduledAtIso).getTime(), [scheduledAtIso]);
-  const raceDayYmd = useMemo(() => {
-    if (!Number.isFinite(baseMs)) return "";
-    return clubWallYmdFromUtcMs(baseMs, displayTimeZone);
-  }, [baseMs, displayTimeZone]);
+  const scheduleCorrupt = useMemo(() => !isPlausibleRaceInstantMs(baseMs), [baseMs]);
+  const raceDayYmd = useMemo(
+    () => resolveRaceDayYmd(
+      scheduledAtIso,
+      displayTimeZone,
+      fleets.map((f) => f.startSignalAtIso),
+    ),
+    [scheduledAtIso, displayTimeZone, fleets],
+  );
 
   const postponeShiftMs = useMemo(
     () => postponementDownShiftMinutes(startSequenceCode) * 60_000,
@@ -550,8 +566,8 @@ export function RoFleetStartSignalsPanel({
       return;
     }
     const ms = clubWallHmOnYmdToUtcMs(recallHmInput, raceDayYmd, displayTimeZone);
-    if (ms == null || !Number.isFinite(ms)) {
-      setRecallError("Enter a valid time as HH:MM (club clock, race day).");
+    if (ms == null || !isPlausibleRaceInstantMs(ms)) {
+      setRecallError("Enter a valid time as HH:MM on the club race day.");
       return;
     }
     setTargets((prev) => ({ ...prev, [recallFleetId]: ms }));
@@ -572,8 +588,8 @@ export function RoFleetStartSignalsPanel({
     if (!raceDayYmd) return;
     const raw = hmDraft[fleetId] ?? "";
     const ms = clubWallHmOnYmdToUtcMs(raw, raceDayYmd, displayTimeZone);
-    if (ms == null || !Number.isFinite(ms)) {
-      setHmError((e) => ({ ...e, [fleetId]: "Invalid HH:MM" }));
+    if (ms == null || !isPlausibleRaceInstantMs(ms)) {
+      setHmError((e) => ({ ...e, [fleetId]: plausibleRaceInstantError() }));
       return;
     }
     setHmError((e) => {
@@ -591,10 +607,10 @@ export function RoFleetStartSignalsPanel({
     void persistFleetStart(fleetId, ms, fleets[0]?.id === fleetId);
   };
 
-  if (!Number.isFinite(baseMs) || fleets.length === 0) {
+  if (fleets.length === 0) {
     return (
       <p className="rounded-xl border border-splice-sky bg-white px-4 py-3 text-sm text-splice-ocean dark:border-splice-navy-light dark:bg-splice-navy dark:text-splice-water">
-        No valid schedule or fleets — start signal panel unavailable.
+        No fleets — start signal panel unavailable.
       </p>
     );
   }
@@ -630,6 +646,11 @@ export function RoFleetStartSignalsPanel({
           Postponement down <strong className="text-splice-navy-light dark:text-splice-sky">+{postponementMin} min</strong>
         </span>
       </div>
+      {scheduleCorrupt ? (
+        <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-950 dark:bg-amber-950/40 dark:text-amber-100" role="status">
+          Stored race schedule looks invalid (1970). Race day below uses today or fleet signals — use Apply to save a correct start time.
+        </p>
+      ) : null}
       {persistError ? (
         <p className="mt-2 rounded-lg bg-red-50 px-2 py-1.5 text-xs text-red-800 dark:bg-red-950/50 dark:text-red-200" role="alert">
           {persistError}
@@ -649,14 +670,14 @@ export function RoFleetStartSignalsPanel({
         {fleets.map((f, fleetIndex) => {
           const tid = f.id;
           const target = targets[tid];
-          if (target == null || !Number.isFinite(target)) return null;
+          const hasTarget = target != null && Number.isFinite(target);
 
-          const eff = effNowFor(tid);
-          const deltaSec = (target - eff) / 1000;
-          const isFuture = deltaSec > 0;
+          const eff = hasTarget ? effNowFor(tid) : now;
+          const deltaSec = hasTarget ? (target! - eff) / 1000 : Number.NaN;
+          const isFuture = hasTarget && deltaSec > 0;
           const paused = pausedAt[tid] != null;
           const recall = !!recallRestart[tid];
-          const started = now >= target;
+          const started = hasTarget && now >= target!;
 
           return (
             <li key={tid} className="rounded-lg border border-splice-sky px-2 py-2 dark:border-splice-ocean">
@@ -702,13 +723,15 @@ export function RoFleetStartSignalsPanel({
                 </div>
 
                 <div className="min-w-0 flex-1 text-center">
-                  {isFuture ? (
+                  {!hasTarget ? (
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Set HH:MM and Apply</p>
+                  ) : isFuture ? (
                     <p className="text-lg font-semibold tabular-nums leading-tight text-splice-navy dark:text-splice-surface">
                       −{formatHms(deltaSec)}
                     </p>
                   ) : (
                     <p className="text-lg font-semibold tabular-nums leading-tight text-splice-navy dark:text-splice-surface">
-                      +{formatHms((now - target) / 1000)}
+                      +{formatHms((now - target!) / 1000)}
                     </p>
                   )}
                   {paused ? (
@@ -774,19 +797,21 @@ export function RoFleetStartSignalsPanel({
                 <p className="mt-1 text-[10px] text-red-700 dark:text-red-300">{hmError[tid]}</p>
               ) : null}
 
-              <div className="mt-1.5 grid min-h-[6.25rem] min-w-0 grid-cols-1 gap-2 border-t border-splice-foam pt-1.5 min-[480px]:grid-cols-[minmax(0,1fr)_auto] dark:border-splice-navy-light">
-                <div className="min-w-0 overflow-x-auto">
-                  <StartSequenceTimeline
-                    targetMs={target}
-                    code={startSequenceCode}
-                    effMs={eff}
-                    fleet={f}
-                  />
+              {hasTarget ? (
+                <div className="mt-1.5 grid min-h-[6.25rem] min-w-0 grid-cols-1 gap-2 border-t border-splice-foam pt-1.5 min-[480px]:grid-cols-[minmax(0,1fr)_auto] dark:border-splice-navy-light">
+                  <div className="min-w-0 overflow-x-auto">
+                    <StartSequenceTimeline
+                      targetMs={target!}
+                      code={startSequenceCode}
+                      effMs={eff}
+                      fleet={f}
+                    />
+                  </div>
+                  <div className="flex min-w-0 justify-center min-[480px]:justify-end">
+                    <NextSequenceChangeAside targetMs={target!} code={startSequenceCode} effMs={eff} fleet={f} />
+                  </div>
                 </div>
-                <div className="flex min-w-0 justify-center min-[480px]:justify-end">
-                  <NextSequenceChangeAside targetMs={target} code={startSequenceCode} effMs={eff} fleet={f} />
-                </div>
-              </div>
+              ) : null}
             </li>
           );
         })}

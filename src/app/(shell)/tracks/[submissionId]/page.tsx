@@ -143,8 +143,9 @@ export default async function TrackSubmissionPage({ params, searchParams }: Prop
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 dark:border-amber-900 dark:bg-amber-950">
               <h2 className="text-lg font-medium text-amber-950 dark:text-amber-50">Waiting for race officer</h2>
               <p className="mt-2 text-sm text-amber-900 dark:text-amber-100">
-                Your track has been submitted for collated fleet analysis. The race officer or club admin will set up
-                course marks for this race. You will see a notification on your home page when your analysis is ready.
+                Your track has been submitted for collated fleet analysis. The race officer or club admin will confirm
+                course and mark positions for your fleet. You will see a notification on your home page when your
+                analysis is ready.
               </p>
             </div>
           ) : null}

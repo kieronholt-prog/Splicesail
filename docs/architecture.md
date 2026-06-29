@@ -90,7 +90,7 @@ Series signup uses **`enterSeriesBulkAction`** (`src/app/actions/enter-series.ts
 |------|---------|
 | `/club-admin` | Hub; single-club admins redirect to `/groups/[id]/club-admin` |
 | `/groups/[id]/club-admin` | PY/hulls, timezone, members, RO-added settings, **pending ad-hoc link queue** |
-| `/groups/[id]/club-admin/sailing-area` | Chart marks and course letters for GPS analysis |
+| `/groups/[id]/club-admin/sailing-area` | Chart marks (fixed/laid/line) and course letters for GPS analysis — single Mapbox map, collapsible mark groups, per-course route view with preamble/cross-SF support |
 | `/groups/[id]` | Club page — join-request approval (admin mode), series maintenance |
 | `/groups/[id]/series/new`, `/series/[seriesId]`, `/scoring`, `/fleets/*` | Series generator, schedule, penalty/discards, club fleet templates |
 

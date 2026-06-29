@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { DEFAULT_MAP_CENTER } from "@/lib/sailing-analysis/map-display";
@@ -13,10 +13,12 @@ import {
   CourseDetailPanel,
   AddCourseForm,
   courseToEntries,
+  entriesToPayload,
   TACK_COLOR,
   COURSE_TYPE_LABEL,
+  type MarkEntry,
 } from "@/components/sailing-area-courses-section";
-import { isLineMark, type SailingCourseRow } from "@/lib/sailing-analysis/types";
+import { isLineMark, type CourseMarkOverride, type SailingCourseRow } from "@/lib/sailing-analysis/types";
 
 // ─── Legend data ──────────────────────────────────────────────────────────────
 
@@ -59,10 +61,14 @@ function SailingAreaMap({
   marks,
   courses,
   selectedCourseId,
+  editing,
+  onMarkDragged,
 }: {
   marks: SailingMarkVm[];
   courses: SailingCourseRow[];
   selectedCourseId: string | null;
+  editing: boolean;
+  onMarkDragged: (name: string, point: "A" | "B" | null, lat: number, lon: number) => void;
 }) {
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN?.trim();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -164,10 +170,40 @@ function SailingAreaMap({
       const course = courses.find((c) => c.id === selectedCourseId);
       if (!course) { sfSrc.setData(EMPTY_FC); courseSrc.setData(EMPTY_FC); return; }
 
-      // Resolve all course entries against club marks
+      const courseOverrides: Record<string, CourseMarkOverride> = course.course_mark_overrides ?? {};
+
+      // Resolve a mark name to a SailingMarkVm, applying course overrides.
+      // Virtual marks (in overrides but not in the global catalogue) are synthesised here.
+      function resolveMarkVm(name: string): SailingMarkVm | null {
+        const ov = courseOverrides[name];
+        const global = byName.get(name) ?? null;
+        if (!global && !ov) return null;
+        if (!global && ov) {
+          return {
+            id: `virtual-${name}`,
+            name,
+            mark_kind: (ov.mark_kind ?? "laid") as SailingMarkVm["mark_kind"],
+            lat: ov.lat, lon: ov.lon,
+            lat2: ov.lat2 ?? null, lon2: ov.lon2 ?? null,
+            description: null,
+          };
+        }
+        if (ov) return { ...global!, lat: ov.lat, lon: ov.lon, lat2: ov.lat2 ?? global!.lat2, lon2: ov.lon2 ?? global!.lon2 };
+        return global;
+      }
+
+      // A mark is draggable in edit mode if it is a global laid mark or a virtual (course-local) mark.
+      function isDraggable(name: string): boolean {
+        if (!editing) return false;
+        const isVirtual = !byName.has(name) && !!courseOverrides[name];
+        const isLaid = byName.get(name)?.mark_kind === "laid";
+        return isVirtual || isLaid;
+      }
+
+      // Resolve all course entries against club marks + overrides
       const entries = courseToEntries(course);
       const resolved = entries
-        .map((e) => ({ ...e, mark: byName.get(e.name) ?? null }))
+        .map((e) => ({ ...e, mark: resolveMarkVm(e.name) }))
         .filter((e): e is typeof e & { mark: SailingMarkVm } => e.mark !== null);
 
       // Find the start and finish line marks for this course.
@@ -194,14 +230,25 @@ function SailingAreaMap({
         const m = lm.mark;
         if (m.lat2 == null || m.lon2 == null) continue;
 
-        for (const [lng, lat, lbl, ttl] of [
-          [m.lon,  m.lat,  "A", `${m.name} — end A`],
-          [m.lon2, m.lat2, "B", `${m.name} — end B`],
-        ] as [number, number, string, string][]) {
-          addMarker(
-            markerEl(`width:22px;height:22px;border-radius:50%;border:3px solid #3b82f6;background:#0a101fcc;color:#3b82f6;display:flex;align-items:center;justify-content:center;font:700 8px ui-monospace,monospace;box-shadow:0 0 0 2px #00000055;cursor:default;`, lbl, ttl),
-            lng, lat, ttl,
-          );
+        const lineDraggable = isDraggable(m.name);
+        const dragCursor = lineDraggable ? "cursor:grab;" : "cursor:default;";
+        for (const [lng, lat, lbl, ttl, point] of [
+          [m.lon,  m.lat,  "A", `${m.name} — end A`, "A"],
+          [m.lon2, m.lat2, "B", `${m.name} — end B`, "B"],
+        ] as [number, number, string, string, "A" | "B"][]) {
+          const el = markerEl(`width:22px;height:22px;border-radius:50%;border:3px solid #3b82f6;background:#0a101fcc;color:#3b82f6;display:flex;align-items:center;justify-content:center;font:700 8px ui-monospace,monospace;box-shadow:0 0 0 2px #00000055;${dragCursor}`, lbl, ttl);
+          const mk = new mapboxgl.Marker({ element: el, draggable: lineDraggable })
+            .setLngLat([lng, lat])
+            .setPopup(new mapboxgl.Popup({ offset: 15, closeButton: false }).setText(ttl))
+            .addTo(map!);
+          markersRef.current.push(mk);
+          lats.push(lat); lons.push(lng);
+          if (lineDraggable) {
+            mk.on("dragend", () => {
+              const ll = mk.getLngLat();
+              onMarkDragged(m.name, point, ll.lat, ll.lng);
+            });
+          }
         }
         sfLineFeatures.push({ type: "Feature", geometry: { type: "LineString", coordinates: [[m.lon, m.lat], [m.lon2, m.lat2]] }, properties: {} });
       }
@@ -229,46 +276,96 @@ function SailingAreaMap({
         );
       }
 
-      // Rounding marks: labelled with All-Marks short labels, coloured by tack
+      // Rounding marks: labelled with All-Marks short labels, coloured by tack.
+      // Laid marks and virtual (course-local) marks are draggable in edit mode.
       const roundingResolved = resolved.filter((e) => !isLineMark(e.mark.mark_kind));
+      const seenRoundingNames = new Set<string>();
       roundingResolved.forEach(({ name, tack, firstLapOnly, mark }) => {
+        // Only place one marker per unique name (same physical mark may appear multiple times).
+        const alreadyPlaced = seenRoundingNames.has(name);
+        seenRoundingNames.add(name);
         const color = TACK_COLOR[tack];
         const lbl = markDisplayProps(mark).label;
-        addMarker(
-          markerEl([
-            `width:26px;height:26px;border-radius:50%;`,
-            `border:3px solid ${color};background:#0a101fcc;color:${color};`,
-            `display:flex;align-items:center;justify-content:center;`,
-            `font:700 9px ui-monospace,monospace;`,
-            `box-shadow:0 0 0 2px #00000055;cursor:default;`,
-            firstLapOnly ? "opacity:0.65;" : "",
-          ].join(""), lbl, name),
-          mark.lon, mark.lat,
-          `${name} — ${tack === "P" ? "Port" : "Starboard"}${firstLapOnly ? " (1st lap)" : ""}`,
-        );
+        const roundDraggable = isDraggable(name);
+        const dragCursor = roundDraggable ? "cursor:grab;" : "cursor:default;";
+        const el = markerEl([
+          `width:26px;height:26px;border-radius:50%;`,
+          `border:3px solid ${color};background:#0a101fcc;color:${color};`,
+          `display:flex;align-items:center;justify-content:center;`,
+          `font:700 9px ui-monospace,monospace;`,
+          `box-shadow:0 0 0 2px #00000055;${dragCursor}`,
+          firstLapOnly ? "opacity:0.65;" : "",
+        ].join(""), lbl, name);
+        const popup = `${name} — ${tack === "P" ? "Port" : "Starboard"}${firstLapOnly ? " (1st lap)" : ""}`;
+        if (!alreadyPlaced) {
+          const mk = new mapboxgl.Marker({ element: el, draggable: roundDraggable })
+            .setLngLat([mark.lon, mark.lat])
+            .setPopup(new mapboxgl.Popup({ offset: 15, closeButton: false }).setText(popup))
+            .addTo(map!);
+          markersRef.current.push(mk);
+          lats.push(mark.lat); lons.push(mark.lon);
+          if (roundDraggable) {
+            mk.on("dragend", () => {
+              const ll = mk.getLngLat();
+              onMarkDragged(name, null, ll.lat, ll.lng);
+            });
+          }
+        }
       });
 
-      // Course line: startCenter → rounding marks → close
+      // Course line: startCenter → [preamble] → repeating marks → first repeating mark
+      //             → finish center (only if finish line is in the course sequence)
       const startCoord: [number, number] | null = startCenter ? [startCenter.lon, startCenter.lat] : null;
-      const finishCoord: [number, number] | null = finishCenter ? [finishCenter.lon, finishCenter.lat] : null;
+
+      // Finish leg is drawn when the last mark in the course sequence is a line mark
+      // (finish_line or start_finish). If the last mark is a rounding mark the finish
+      // leg is suppressed — the app warns the user to add a finish line in that case.
+      const lastResolved = resolved[resolved.length - 1] ?? null;
+      const finishInSequence =
+        lastResolved && isLineMark(lastResolved.mark.mark_kind) ? lastResolved.mark : null;
+      const finishCoordInSequence: [number, number] | null = finishInSequence ? [lineCenter(finishInSequence).lon, lineCenter(finishInSequence).lat] : null;
+
       const seqRounding = roundingResolved.filter((e) => !e.firstLapOnly);
-      const routeCoords: [number, number][] = [];
-      if (startCoord) routeCoords.push(startCoord);
-      routeCoords.push(...roundingResolved.map((e) => [e.mark.lon, e.mark.lat] as [number, number]));
-      const crossSfEachLap = (course as { cross_sf_each_lap?: boolean }).cross_sf_each_lap ?? false;
-      if (crossSfEachLap) {
-        if (finishCoord) routeCoords.push(finishCoord);
+
+      // Route depends on whether the course ends with a start_finish (circuit)
+      // or a separate finish_line:
+      //
+      // start_finish circuit: start → [preamble] → marks → S/F (simple loop, no lap close)
+      // finish_line course:   start → [preamble] → marks → first mark (lap close) [Feature 1]
+      //                       + last mark → finish_line centre [Feature 2]
+      // no finish in sequence: start → [preamble] → marks → first mark (circuit implied)
+      const finishIsCircuit = finishInSequence?.mark_kind === "start_finish";
+      const finishIsSeparate = finishInSequence?.mark_kind === "finish_line";
+
+      const courseFeatures: GeoJSON.Feature[] = [];
+      const circuitCoords: [number, number][] = [];
+      if (startCoord) circuitCoords.push(startCoord);
+      circuitCoords.push(...roundingResolved.map((e) => [e.mark.lon, e.mark.lat] as [number, number]));
+
+      if (finishIsCircuit) {
+        // Close the circuit back to S/F — no lap-close leg needed.
+        if (startCoord) circuitCoords.push(startCoord);
       } else if (seqRounding.length > 0) {
-        routeCoords.push([seqRounding[0].mark.lon, seqRounding[0].mark.lat]);
-      } else if (finishCoord) {
-        routeCoords.push(finishCoord);
+        // Lap close: last repeating mark → first repeating mark.
+        // Shows the circuit leg for multi-lap or finish_line courses.
+        circuitCoords.push([seqRounding[0].mark.lon, seqRounding[0].mark.lat]);
       }
 
-      courseSrc.setData(
-        routeCoords.length >= 2
-          ? { type: "Feature", geometry: { type: "LineString", coordinates: routeCoords }, properties: {} }
-          : EMPTY_FC,
-      );
+      if (circuitCoords.length >= 2) {
+        courseFeatures.push({ type: "Feature", geometry: { type: "LineString", coordinates: circuitCoords }, properties: {} });
+      }
+
+      // Separate finish leg only for explicit finish_line marks.
+      if (finishIsSeparate && finishCoordInSequence) {
+        const lastMark = seqRounding.length > 0
+          ? ([seqRounding[seqRounding.length - 1].mark.lon, seqRounding[seqRounding.length - 1].mark.lat] as [number, number])
+          : startCoord;
+        if (lastMark) {
+          courseFeatures.push({ type: "Feature", geometry: { type: "LineString", coordinates: [lastMark, finishCoordInSequence] }, properties: {} });
+        }
+      }
+
+      courseSrc.setData({ type: "FeatureCollection", features: courseFeatures });
     }
 
     // Fit/fly to visible marks whenever selection changes
@@ -280,7 +377,7 @@ function SailingAreaMap({
     } else if (lats.length === 1) {
       map.flyTo({ center: [lons[0], lats[0]], zoom: 15, duration: 400 });
     }
-  }, [loaded, selectedCourseId, marks, courses, byName]);
+  }, [loaded, selectedCourseId, marks, courses, byName, editing, onMarkDragged]);
 
   if (!token) return null;
 
@@ -315,13 +412,20 @@ export function SailingAreaView({
   groupId,
   marks,
   courses,
+  initialCourseId,
 }: {
   groupId: string;
   marks: SailingMarkVm[];
   courses: SailingCourseRow[];
+  initialCourseId?: string;
 }) {
-  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(
+    () => (initialCourseId && courses.some((c) => c.id === initialCourseId) ? initialCourseId : null),
+  );
   const [addingCourse, setAddingCourse] = useState(false);
+  const [liveEntries, setLiveEntries] = useState<MarkEntry[] | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [liveOverrides, setLiveOverrides] = useState<Record<string, CourseMarkOverride> | null>(null);
 
   const selectedCourse = courses.find((c) => c.id === selectedCourseId) ?? null;
 
@@ -332,8 +436,39 @@ export function SailingAreaView({
     }
   }, [courses, selectedCourseId]);
 
+  // Reset live state whenever the selected course changes
+  useEffect(() => {
+    setLiveEntries(null);
+    setLiveOverrides(null);
+    setEditing(false);
+  }, [selectedCourseId]);
+
+  // Merge live editing state into the course passed to the map so it updates in real time.
+  const mapCourses = useMemo(() => {
+    if (!selectedCourseId) return courses;
+    return courses.map((c) => {
+      if (c.id !== selectedCourseId) return c;
+      const { mark_sequence, marks_preamble } = liveEntries
+        ? entriesToPayload(liveEntries)
+        : { mark_sequence: c.mark_sequence, marks_preamble: c.marks_preamble };
+      const course_mark_overrides = liveOverrides ?? c.course_mark_overrides ?? {};
+      return { ...c, mark_sequence, marks_preamble, course_mark_overrides };
+    });
+  }, [courses, liveEntries, liveOverrides, selectedCourseId]);
+
+  const handleMarkDragged = useCallback((name: string, point: "A" | "B" | null, lat: number, lon: number) => {
+    setLiveOverrides((prev) => {
+      const base = prev ?? selectedCourse?.course_mark_overrides ?? {};
+      const existing = base[name] ?? {};
+      const updated = point === "B"
+        ? { ...existing, lat2: lat, lon2: lon }
+        : { ...existing, lat, lon };
+      return { ...base, [name]: updated };
+    });
+  }, [selectedCourse]);
+
   const pillBase =
-    "shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap";
+    "rounded-full px-3 py-1 text-xs font-medium transition-colors";
   const pillActive =
     "bg-splice-navy text-white dark:bg-splice-foam dark:text-splice-navy";
   const pillInactive =
@@ -347,10 +482,10 @@ export function SailingAreaView({
   return (
     <section className="mt-10 space-y-4">
       {/* Single shared map */}
-      <SailingAreaMap marks={marks} courses={courses} selectedCourseId={selectedCourseId} />
+      <SailingAreaMap marks={marks} courses={mapCourses} selectedCourseId={selectedCourseId} editing={editing} onMarkDragged={handleMarkDragged} />
 
       {/* Selector row: All Marks · course letters · Add course */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+      <div className="flex flex-wrap gap-2">
         <button
           type="button"
           onClick={() => selectCourse(null)}
@@ -384,7 +519,17 @@ export function SailingAreaView({
       {addingCourse ? (
         <AddCourseForm groupId={groupId} onDone={() => setAddingCourse(false)} />
       ) : selectedCourse ? (
-        <CourseDetailPanel key={selectedCourse.id} course={selectedCourse} allMarks={marks} groupId={groupId} />
+        <CourseDetailPanel
+          key={selectedCourse.id}
+          course={selectedCourse}
+          allMarks={marks}
+          groupId={groupId}
+          editing={editing}
+          onEditingChange={setEditing}
+          overrides={liveOverrides ?? selectedCourse.course_mark_overrides ?? {}}
+          onOverridesChange={setLiveOverrides}
+          onEntriesChange={setLiveEntries}
+        />
       ) : (
         <SailingMarksSection groupId={groupId} marks={marks} />
       )}

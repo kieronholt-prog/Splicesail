@@ -1,14 +1,27 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { RoTrackAnalysisSetupForm } from "@/components/sailing-analysis/ro-track-analysis-setup-form";
+import { fleetStartLabel } from "@/components/sailing-analysis/ro-track-analysis-fleet-panel";
 import { getServerAuth } from "@/lib/supabase/auth-cache";
-import { loadRaceFleetTracks } from "@/lib/sailing-analysis/load-race-fleet-tracks";
+import {
+  countPendingCollatedByFleet,
+  loadRaceFleetTracks,
+} from "@/lib/sailing-analysis/load-race-fleet-tracks";
+import {
+  ensureFleetAnalysisSettingsRow,
+  loadRaceFleetAnalysisSettingsMap,
+  type RaceFleetAnalysisSettingsRow,
+} from "@/lib/sailing-analysis/race-fleet-analysis-settings";
+import {
+  describeTrackRaceMatchWindow,
+  TRACK_RACE_MATCH_DEFAULT_OPEN_HOURS,
+} from "@/lib/track-race-matching";
+import { loadOrSeedRaceFleetsForTrackAnalysis } from "@/lib/ensure-race-fleets-for-track-analysis";
+import { syncRaceFleetsFromSeriesTemplateAction } from "@/app/actions/race-track-analysis";
 import {
   raceStartSecAfterFirstGps,
-  resolveRaceStartUtcMs,
+  resolveFleetStartUtcMs,
 } from "@/lib/sailing-analysis/race-start-from-schedule";
-import { formatClubHmFromIso } from "@/lib/club-display-format";
-import type { MarkOverride } from "@/lib/sailing-analysis/types";
 import {
   buildRoRaceLineNav,
   RO_RACE_LINE_NAV_ACTIVE_CLASS,
@@ -19,7 +32,14 @@ export const dynamic = "force-dynamic";
 
 type Props = {
   params: Promise<{ id: string; seriesId: string; raceId: string }>;
-  searchParams: Promise<{ error?: string; settings_saved?: string; analysis_ready?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    settings_saved?: string;
+    analysis_ready?: string;
+    fleet?: string;
+    analysed?: string;
+    fleets_synced?: string;
+  }>;
 };
 
 export default async function RoTrackAnalysisPage({ params, searchParams }: Props) {
@@ -51,38 +71,91 @@ export default async function RoTrackAnalysisPage({ params, searchParams }: Prop
   const clubTz = group?.iana_timezone ?? "Europe/London";
 
   const [
-    { data: settings, error: settingsError },
+    { data: seriesRow },
     { data: courses, error: coursesError },
-    { count: pendingCount, error: pendingError },
     { data: clubMarks, error: marksError },
-    raceStartUtcMs,
-    fleetTracks,
+    fleetLoad,
+    pendingByFleet,
+    settingsLoad,
   ] = await Promise.all([
-    supabase.from("race_analysis_settings").select("*").eq("race_id", raceId).maybeSingle(),
-    supabase.from("group_sailing_courses").select("*").eq("group_id", groupId).order("sort_order"),
     supabase
-      .from("race_track_submissions")
-      .select("*", { count: "exact", head: true })
-      .eq("race_id", raceId)
-      .eq("analysis_mode", "collated")
-      .eq("status", "pending_ro"),
+      .from("races")
+      .select("series:series_id(tally_open_hours_before_fleet_start)")
+      .eq("id", raceId)
+      .maybeSingle(),
+    supabase.from("group_sailing_courses").select("*").eq("group_id", groupId).order("sort_order"),
     supabase.from("group_sailing_marks").select("*").eq("group_id", groupId).order("sort_order"),
-    resolveRaceStartUtcMs(supabase, raceId),
-    loadRaceFleetTracks(supabase, raceId, ["pending_ro", "ready"]),
+    loadOrSeedRaceFleetsForTrackAnalysis(supabase, { raceId, seriesId, groupId }),
+    countPendingCollatedByFleet(supabase, raceId),
+    supabase.from("race_fleet_analysis_settings").select("id").eq("race_id", raceId).limit(1),
   ]);
 
-  const previewTrack = fleetTracks[0]?.points ?? [];
-  const firstGps = previewTrack.find((p) => p.time != null)?.time ?? previewTrack[0]?.time;
-  const raceStartUnixSec = raceStartUtcMs != null ? Math.round(raceStartUtcMs / 1000) : null;
-  const raceStartSec = raceStartSecAfterFirstGps(raceStartUtcMs, firstGps ?? null);
-  const raceStartLabel =
-    raceStartUtcMs != null
-      ? formatClubHmFromIso(new Date(raceStartUtcMs).toISOString(), clubTz)
-      : null;
+  const fleetRows = fleetLoad.fleets;
+  const fleetsSyncedOnLoad = fleetLoad.syncedFromTemplate;
+  const fleetsError = fleetLoad.syncError ? { message: fleetLoad.syncError } : null;
+  const templateFleetCount = fleetLoad.templateFleetCount;
 
+  const settingsTableMissing = Boolean(
+    settingsLoad.error?.message?.includes("race_fleet_analysis_settings"),
+  );
+
+  let settingsMap = await loadRaceFleetAnalysisSettingsMap(supabase, raceId);
+
+  const raceFleets = (fleetRows ?? []).map((f) => ({
+    id: f.id,
+    name: f.name,
+    startSignalLabel: fleetStartLabel(f.start_signal_at, clubTz),
+  }));
+
+  const settingsByFleetId: Record<string, RaceFleetAnalysisSettingsRow | null> = {};
+  const fleetTracksByFleetId: Record<string, Awaited<ReturnType<typeof loadRaceFleetTracks>>> = {};
+  const pendingByFleetId: Record<string, number> = {};
+  const raceStartByFleetId: Record<string, { unixSec: number | null; sec: number }> = {};
+
+  if (!settingsTableMissing) {
+    for (const f of raceFleets) {
+      await ensureFleetAnalysisSettingsRow(supabase, {
+        raceId,
+        raceFleetId: f.id,
+        groupId,
+      });
+    }
+    settingsMap = await loadRaceFleetAnalysisSettingsMap(supabase, raceId);
+  }
+
+  for (const f of raceFleets) {
+    settingsByFleetId[f.id] = settingsMap.get(f.id) ?? null;
+    fleetTracksByFleetId[f.id] = await loadRaceFleetTracks(supabase, raceId, {
+      raceFleetId: f.id,
+    });
+    pendingByFleetId[f.id] = pendingByFleet.get(f.id) ?? 0;
+
+    const previewTrack = fleetTracksByFleetId[f.id][0]?.points ?? [];
+    const firstGps = previewTrack.find((p) => p.time != null)?.time ?? previewTrack[0]?.time;
+    const fleetStartUtcMs = await resolveFleetStartUtcMs(supabase, raceId, f.id);
+    raceStartByFleetId[f.id] = {
+      unixSec: fleetStartUtcMs != null ? Math.round(fleetStartUtcMs / 1000) : null,
+      sec: raceStartSecAfterFirstGps(fleetStartUtcMs, firstGps ?? null),
+    };
+  }
+
+  const unassignedPending = pendingByFleet.get(null) ?? 0;
   const courseRows = courses ?? [];
-  const loadError = settingsError?.message ?? coursesError?.message ?? pendingError?.message ?? marksError?.message ?? null;
+  const seriesRel = seriesRow?.series;
+  const seriesOpenHours =
+    (Array.isArray(seriesRel) ? seriesRel[0] : seriesRel)?.tally_open_hours_before_fleet_start ??
+    TRACK_RACE_MATCH_DEFAULT_OPEN_HOURS;
+  const matchWindowLabel = describeTrackRaceMatchWindow(seriesOpenHours);
+  const loadError =
+    (settingsTableMissing
+      ? "Database migration required: apply 20261715120000_race_fleet_analysis_settings.sql (supabase db push)."
+      : null) ??
+    coursesError?.message ??
+    marksError?.message ??
+    fleetsError?.message ??
+    null;
   const isClubAdmin = me?.role === "club_admin";
+  const totalPending = [...pendingByFleet.values()].reduce((a, b) => a + b, 0);
 
   const nav = buildRoRaceLineNav({ groupId, seriesId, raceId, current: "track-analysis" });
 
@@ -115,16 +188,43 @@ export default async function RoTrackAnalysisPage({ params, searchParams }: Prop
         ) : null}
         {q.settings_saved === "1" ? (
           <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-            Course settings saved — you can now run fleet analysis.
+            Fleet course settings saved.
           </p>
         ) : null}
         {q.analysis_ready === "1" ? (
           <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-            Fleet analysis complete — sailors have been notified on their home page.
+            Track analysis complete
+            {q.analysed ? ` — ${q.analysed} track${q.analysed === "1" ? "" : "s"} processed` : ""}. Sailors are
+            notified on their home page.
+          </p>
+        ) : null}
+        {fleetsSyncedOnLoad || q.fleets_synced ? (
+          <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+            Race fleets were created from this series&apos; schedule template
+            {q.fleets_synced ? ` (${q.fleets_synced} fleets)` : ""}. Select a fleet below to set course and laps.
           </p>
         ) : null}
 
         <div className="mt-6">
+          {totalPending === 0 && raceFleets.length > 0 && courseRows.length > 0 ? (
+            <p className="mb-6 rounded-lg border border-splice-sky/80 bg-splice-sky/15 px-3 py-2 text-sm text-splice-navy dark:border-splice-ocean dark:bg-splice-navy-light/40 dark:text-splice-foam">
+              No collated tracks are waiting yet — you can still preset <strong>course and laps per fleet</strong>{" "}
+              below and save mark positions before sailors upload GPS.
+            </p>
+          ) : null}
+
+          <details className="mb-6 text-sm text-splice-ocean dark:text-splice-water">
+            <summary className="cursor-pointer font-medium text-splice-navy dark:text-splice-foam">
+              When does a GPS track link to this race?
+            </summary>
+            <p className="mt-2 pl-1">
+              Automatic matching uses the activity time range overlapping{" "}
+              <strong>{matchWindowLabel}</strong> (from this series&apos; tally-open setting, default 2 hours before).
+              Any overlap qualifies; races where you already have an entry are preferred. Sailors can also pick the race
+              manually when confirming their upload.
+            </p>
+          </details>
+
           {courseRows.length === 0 ? (
             <p className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
               No course letters are configured for this club yet.
@@ -141,25 +241,64 @@ export default async function RoTrackAnalysisPage({ params, searchParams }: Prop
             </p>
           ) : null}
 
+          {unassignedPending > 0 ? (
+            <p className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+              {unassignedPending} collated track{unassignedPending !== 1 ? "s" : ""}{" "}
+              {unassignedPending !== 1 ? "are" : "is"} not linked to a fleet (check race entries on Manage).
+            </p>
+          ) : null}
+
+          {raceFleets.length === 0 ? (
+            <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
+              <p className="font-medium">No race fleets on this race yet</p>
+              <p className="mt-2">
+                Fleet pills come from <code className="text-xs">race_fleets</code> rows per race (not the series
+                page checklist alone). This race has none
+                {templateFleetCount > 0
+                  ? `, but the series template lists ${templateFleetCount} fleet${templateFleetCount === 1 ? "" : "s"}.`
+                  : "."}
+              </p>
+              {templateFleetCount > 0 ? (
+                <form action={syncRaceFleetsFromSeriesTemplateAction} className="mt-3">
+                  <input type="hidden" name="group_id" value={groupId} />
+                  <input type="hidden" name="race_id" value={raceId} />
+                  <input type="hidden" name="series_id" value={seriesId} />
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-splice-navy px-3 py-1.5 text-sm font-medium text-white dark:bg-splice-foam dark:text-splice-navy"
+                  >
+                    Create fleets from series template
+                  </button>
+                </form>
+              ) : (
+                <p className="mt-2">
+                  <Link
+                    href={`/groups/${groupId}/series/${seriesId}`}
+                    className="font-medium underline"
+                  >
+                    Open the series page
+                  </Link>{" "}
+                  and save applicable fleets on the race generator, then return here.
+                </p>
+              )}
+            </div>
+          ) : null}
+
           <RoTrackAnalysisSetupForm
             groupId={groupId}
             raceId={raceId}
             seriesId={seriesId}
             courses={courseRows}
             clubMarks={clubMarks ?? []}
-            fleetTracks={fleetTracks}
-            raceStartUnixSec={raceStartUnixSec}
-            raceStartSec={raceStartSec}
-            raceStartLabel={raceStartLabel}
-            defaultCourseLetter={settings?.course_letter}
-            defaultLaps={settings?.laps}
-            defaultWind={settings?.wind_direction}
-            defaultCourseSetup={(settings?.course_setup ?? null) as Record<string, unknown> | null}
-            defaultMarkOverrides={(settings?.mark_overrides ?? null) as Record<string, MarkOverride> | null}
-            pendingCount={pendingCount ?? 0}
-            hasSavedCourse={Boolean(settings?.course_letter)}
+            raceFleets={raceFleets}
+            settingsByFleetId={settingsByFleetId}
+            fleetTracksByFleetId={fleetTracksByFleetId}
+            pendingByFleetId={pendingByFleetId}
+            raceStartByFleetId={raceStartByFleetId}
+            initialFleetId={q.fleet}
           />
         </div>
+
       </main>
     </div>
   );

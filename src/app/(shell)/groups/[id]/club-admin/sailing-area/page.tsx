@@ -16,6 +16,7 @@ type Props = {
     already_loaded?: string;
     mark_saved?: string;
     course_saved?: string;
+    selected?: string;
   }>;
 };
 
@@ -83,17 +84,12 @@ export default async function SailingAreaAdminPage({ params, searchParams }: Pro
             courses).
           </p>
         ) : null}
-        {markRows.length > 0 ? (
-          <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-            {markRows.length} chart marks and {courseRows.length} course letters (A–Y + custom) from the Sailstats WSC
-            catalogue are configured for track analysis.
-          </p>
-        ) : (
+        {markRows.length === 0 ? (
           <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
             No marks or courses yet. Warsash clubs are seeded automatically when migrations run; use the button below
             to import the standard WSC set (23 marks, 24 courses).
           </p>
-        )}
+        ) : null}
 
         {markRows.length === 0 ? (
           <form action={importWscSeedAction} className="mt-6">
@@ -104,7 +100,7 @@ export default async function SailingAreaAdminPage({ params, searchParams }: Pro
           </form>
         ) : null}
 
-        <SailingAreaView groupId={groupId} marks={markRows} courses={courseRows} />
+        <SailingAreaView groupId={groupId} marks={markRows} courses={courseRows} initialCourseId={q.selected} />
       </main>
     </div>
   );

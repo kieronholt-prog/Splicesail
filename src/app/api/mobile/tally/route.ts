@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { bumpTally } from "@/lib/tally/bump-tally";
+import { undoTallyAfloat } from "@/lib/tally/undo-tally-afloat";
 import { authenticateMobileRequest } from "@/lib/supabase/mobile-route";
 
 type TallyBody = {
@@ -7,7 +8,7 @@ type TallyBody = {
   seriesId?: string;
   raceId?: string;
   boatId?: string;
-  which?: "afloat" | "ashore";
+  which?: "afloat" | "ashore" | "undo_afloat";
   outcome?: string;
 };
 
@@ -22,6 +23,22 @@ export async function POST(request: Request) {
     const raceId = String(body.raceId ?? "").trim();
     const boatId = String(body.boatId ?? "").trim();
     const which = body.which;
+
+    if (which === "undo_afloat") {
+      const result = await undoTallyAfloat(auth.supabase, {
+        groupId,
+        seriesId,
+        raceId,
+        boatId,
+        userId: auth.userId,
+      });
+
+      if (!result.ok) {
+        return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
+      }
+
+      return NextResponse.json({ ok: true });
+    }
 
     if (which !== "afloat" && which !== "ashore") {
       return NextResponse.json({ ok: false, error: "Invalid tally action." }, { status: 400 });

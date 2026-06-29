@@ -93,16 +93,41 @@ See [race-types.md](./race-types.md) for handicap vs level rated vs pursuit beha
 
 | Table | Notes |
 |--------|--------|
-| `group_sailing_marks` | Per-club chart marks (`mark_kind`: fixed \| laid) |
-| `group_sailing_courses` | Course letter, `mark_sequence` / `marks_preamble` jsonb |
+| `group_sailing_marks` | Per-club chart marks; `mark_kind`: `fixed` \| `laid` \| `start_finish` \| `start_line` \| `finish_line`; line marks require `lat2`/`lon2` |
+| `group_sailing_courses` | Course letter; `mark_sequence` jsonb (ordered mark names, position 0 is always the S/F mark); `marks_preamble` jsonb (marks rounded once on opening lap only, placed after the start in display order); `cross_sf_each_lap` boolean (default false) |
 | `user_strava_connections` | Strava OAuth tokens per user |
 | `race_track_submissions` | Track ingest, race/boat link, `analysis_mode`, status machine |
-| `race_analysis_settings` | RO-confirmed course setup per race (collated) |
+| `race_fleet_analysis_settings` | RO-confirmed course, laps, and mark positions per `race_fleets` row (collated analysis) |
+| `race_analysis_settings` | **Deprecated** — migrated to `race_fleet_analysis_settings`; retained for rollback |
 | `race_track_analyses` | Computed stats + optional `analysis_snapshot` |
 
 Storage bucket **`race-tracks`** for uploaded GPX/FIT. See [sailing-analysis.md](./sailing-analysis.md).
 
 **WSC seed:** migration `20261703120000_seed_wsc_sailing_area.sql` defines `seed_wsc_sailing_area(group_id)` and auto-seeds clubs whose slug is `warsash` / `wsc` / `warsash-sc` or whose name contains “Warsash”. Club admins can re-run via **Sailing area → Import WSC** (idempotent — skips if marks already exist).
+
+**WSC courses:** 23 courses (A–Y) were hard-reset to match the canonical Course Selector app (`20261713120000_reset_wsc_courses_canonical.sql`). `mark_sequence[0]` is always `START/FINISH`; preamble marks are displayed immediately after the start mark.
+
+### Sailing area admin UI (`/groups/[id]/club-admin/sailing-area`)
+
+Single Mapbox instance across the whole page (one credit per load). Two main sections:
+
+**Marks** — collapsible groups: Start/Finish line marks (blue), Pile/Buoy (colour by channel side), Named Fixed (yellow), Laid (orange). Inline edit modal per mark. Mark kinds:
+- `start_finish` / `start_line` / `finish_line` — two-ended line marks (lat/lon + lat2/lon2); shown in blue; rendered as A/B endpoints + centre marker
+- `fixed` — permanent chart feature; colour by `channel_side` (green/red) or yellow if none
+- `laid` — temporary race mark; orange
+
+**Courses** — pill selector switches the map between All-marks overview and a per-course route view:
+- All-marks view: colour-coded markers with legend and navigation disclaimer
+- Course view: S/F line + numbered markers coloured by rounding side (port=red, starboard=green); route line from S/F centre through all sequence marks closing back to first sequence mark (or wrapping via `cross_sf_each_lap`); first-lap-only (preamble) marks shown lowercase
+- `CourseDetailPanel` warns if first mark is not a start line or last mark is not a finish line
+- Add Mark dropdown includes all marks including duplicates and line marks (several WSC courses legitimately use the same mark twice)
+- Preamble marks display order: `[seq[0], ...preamble, ...seq[1:]]` — i.e. START/FINISH → preamble marks → rest of sequence
+
+**Key components:**
+- `src/components/sailing-area-view.tsx` — top-level, owns the single Mapbox instance; GeoJSON sources created once on map load and updated via `setData()` (avoids stale-source race condition)
+- `src/components/sailing-area-marks-section.tsx` — collapsible mark groups + edit modal
+- `src/components/sailing-area-courses-section.tsx` — course pills + `CourseDetailPanel`
+- `src/components/sailing-analysis/mark-edit-map.tsx` — mini map used inside mark edit modal
 
 ## Naming gotchas
 

@@ -40,3 +40,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# iOS app
+/apps/phone-ios/.derivedData/
+/apps/phone-ios/SplicePhone/Config/SpliceSecrets.plist
+/apps/phone-ios/**/*.xcuserstate
+
+# Garmin watch builds
+/apps/watch-garmin/bin/

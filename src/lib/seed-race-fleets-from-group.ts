@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { RACE_FLEET_ICS_PLACEHOLDER } from "@/lib/race-fleet-club-flag";
+import { MAX_RACE_FLEET_START_OFFSET_MINUTES } from "@/lib/race-fleet-offset-limits";
 
 export type ParsedApplicableFleetRow = {
   groupFleetId: string;
@@ -18,8 +19,10 @@ export function parseApplicableGroupFleetsFromForm(formData: FormData): ParsedAp
   for (const groupFleetId of ids) {
     const offsetRaw = String(formData.get(`fleet_start_offset_${groupFleetId}`) ?? "").trim();
     const n = offsetRaw.length ? Math.trunc(Number(offsetRaw)) : 0;
-    if (!Number.isFinite(n) || n < 0 || n > 60) {
-      return { error: "Each selected fleet needs a start offset from 0 to 60 minutes after the first start." };
+    if (!Number.isFinite(n) || n < 0 || n > MAX_RACE_FLEET_START_OFFSET_MINUTES) {
+      return {
+        error: `Each selected fleet needs a start offset from 0 to ${MAX_RACE_FLEET_START_OFFSET_MINUTES} minutes after the first start.`,
+      };
     }
     out.push({ groupFleetId, startOffsetMinutes: n });
   }
