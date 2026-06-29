@@ -5,6 +5,7 @@ import { isPlausibleRaceInstantMs, plausibleRaceInstantError } from "@/lib/plaus
 import { getServerAuth } from "@/lib/supabase/auth-cache";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 function managePath(groupId: string, seriesId: string, raceId: string) {
   return `/groups/${groupId}/series/${seriesId}/races/${raceId}/manage`;
@@ -15,13 +16,17 @@ function seriesPath(groupId: string, seriesId: string) {
 }
 
 function revalidateRaceStartViews(groupId: string, seriesId: string, raceId: string) {
-  // Defer all path invalidation so Apply returns before RSC revalidation work.
   after(() => {
     revalidatePath(managePath(groupId, seriesId, raceId));
     revalidatePath(seriesPath(groupId, seriesId));
     revalidatePath(`/groups/${groupId}/series/${seriesId}/races/${raceId}/finishes`);
     revalidatePath("/");
   });
+}
+
+async function deferFinishRecomputeIfNeeded(supabase: SupabaseClient, raceId: string) {
+  await supabase.rpc("recompute_race_finishes_timing_for_race", { p_race_id: raceId });
+  await supabase.rpc("recompute_race_guest_finishes_timing_for_race", { p_race_id: raceId });
 }
 
 async function requireStaff(
@@ -96,6 +101,9 @@ export async function updateRaceFleetStartSignalAction(input: {
   });
   if ("error" in applied) return applied;
 
+  after(() => {
+    void deferFinishRecomputeIfNeeded(supabase, raceId);
+  });
   revalidateRaceStartViews(groupId, seriesId, raceId);
 
   return { ok: true };

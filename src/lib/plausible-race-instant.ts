@@ -33,6 +33,28 @@ export function resolveRaceDayYmd(
   return clubTodayYmd(displayTimeZone);
 }
 
+/** HH:MM on the RO panel — prefer fleet target / postponed-today over a stale schedule. */
+export function resolveRaceDayYmdForHm(
+  scheduledAtIso: string,
+  displayTimeZone: string,
+  fleet: {
+    startSignalAtIso?: string | null;
+    startPostponedAtIso?: string | null;
+  },
+  targetMs?: number | null,
+): string {
+  if (targetMs != null && isPlausibleRaceInstantMs(targetMs)) {
+    return clubWallYmdFromUtcMs(targetMs, displayTimeZone);
+  }
+  if (fleet.startPostponedAtIso && isPlausibleRaceInstantIso(fleet.startPostponedAtIso)) {
+    return clubTodayYmd(displayTimeZone);
+  }
+  if (fleet.startSignalAtIso && isPlausibleRaceInstantIso(fleet.startSignalAtIso)) {
+    return clubWallYmdFromUtcMs(new Date(fleet.startSignalAtIso).getTime(), displayTimeZone);
+  }
+  return resolveRaceDayYmd(scheduledAtIso, displayTimeZone, [fleet.startSignalAtIso]);
+}
+
 export function plausibleRaceInstantError(label = "Start time"): string {
   return `${label} must be a valid date on the club race day (not 1970 or empty).`;
 }

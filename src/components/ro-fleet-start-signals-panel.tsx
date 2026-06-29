@@ -8,6 +8,7 @@ import {
   isPlausibleRaceInstantMs,
   plausibleRaceInstantError,
   resolveRaceDayYmd,
+  resolveRaceDayYmdForHm,
 } from "@/lib/plausible-race-instant";
 import {
   nextStartSequenceMilestone,
@@ -395,6 +396,7 @@ export function RoFleetStartSignalsPanel({
   const recallDialogRef = useRef<HTMLDialogElement>(null);
   const [recallFleetId, setRecallFleetId] = useState<string | null>(null);
   const [recallHmInput, setRecallHmInput] = useState("");
+  const [recallRaceDayYmd, setRecallRaceDayYmd] = useState("");
   const [recallError, setRecallError] = useState<string | null>(null);
 
   const beepStateRef = useRef<Record<string, { lastCeil: number; longPlayed: boolean }>>({});
@@ -412,6 +414,12 @@ export function RoFleetStartSignalsPanel({
 
   const persistFleetStart = useCallback(
     async (fleetId: string, ms: number, isPrimaryFleet: boolean) => {
+      if (!isPlausibleRaceInstantMs(ms)) {
+        setPersistError(plausibleRaceInstantError());
+        return;
+      }
+      const previousTarget = targets[fleetId];
+      const previousHm = hmDraft[fleetId];
       setPersistError(null);
       setSavingFleetId(fleetId);
       try {
@@ -425,6 +433,12 @@ export function RoFleetStartSignalsPanel({
         });
         if ("error" in res) {
           setPersistError(res.error);
+          if (previousTarget != null && Number.isFinite(previousTarget)) {
+            setTargets((prev) => ({ ...prev, [fleetId]: previousTarget }));
+          }
+          if (previousHm != null) {
+            setHmDraft((prev) => ({ ...prev, [fleetId]: previousHm }));
+          }
           return;
         }
         if (isPrimaryFleet) {
@@ -434,7 +448,7 @@ export function RoFleetStartSignalsPanel({
         setSavingFleetId(null);
       }
     },
-    [groupId, seriesId, raceId],
+    [groupId, seriesId, raceId, targets, hmDraft],
   );
 
   const persistFleetPostponed = useCallback(
@@ -583,19 +597,34 @@ export function RoFleetStartSignalsPanel({
   );
 
   const openRecallDialog = (fleetId: string) => {
+    const fleet = fleets.find((f) => f.id === fleetId);
     const t = targets[fleetId];
+    const ymd =
+      fleet != null
+        ? resolveRaceDayYmdForHm(scheduledAtIso, displayTimeZone, fleet, t)
+        : raceDayYmd;
     setRecallFleetId(fleetId);
-    setRecallHmInput(t != null ? utcMsToClubWallHm(t, displayTimeZone) : "");
+    setRecallHmInput(
+      t != null && isPlausibleRaceInstantMs(t)
+        ? utcMsToClubWallHm(t, displayTimeZone)
+        : utcMsToClubWallHm(now, displayTimeZone),
+    );
+    setRecallRaceDayYmd(ymd);
     setRecallError(null);
     recallDialogRef.current?.showModal();
   };
 
   const confirmRecallRestart = () => {
-    if (!recallFleetId || !raceDayYmd) {
+    if (!recallFleetId || !recallRaceDayYmd) {
       recallDialogRef.current?.close();
       return;
     }
-    const ms = clubWallHmOnYmdToUtcMs(recallHmInput, raceDayYmd, displayTimeZone);
+    const fleet = fleets.find((f) => f.id === recallFleetId);
+    const ymd =
+      fleet != null
+        ? resolveRaceDayYmdForHm(scheduledAtIso, displayTimeZone, fleet, targets[recallFleetId])
+        : recallRaceDayYmd;
+    const ms = clubWallHmOnYmdToUtcMs(recallHmInput, ymd, displayTimeZone);
     if (ms == null || !isPlausibleRaceInstantMs(ms)) {
       setRecallError("Enter a valid time as HH:MM on the club race day.");
       return;
@@ -615,9 +644,16 @@ export function RoFleetStartSignalsPanel({
   };
 
   const applyHm = (fleetId: string) => {
-    if (!raceDayYmd) return;
+    const fleet = fleets.find((f) => f.id === fleetId);
+    if (!fleet) return;
+    const ymd = resolveRaceDayYmdForHm(
+      scheduledAtIso,
+      displayTimeZone,
+      fleet,
+      targets[fleetId],
+    );
     const raw = hmDraft[fleetId] ?? "";
-    const ms = clubWallHmOnYmdToUtcMs(raw, raceDayYmd, displayTimeZone);
+    const ms = clubWallHmOnYmdToUtcMs(raw, ymd, displayTimeZone);
     if (ms == null || !isPlausibleRaceInstantMs(ms)) {
       setHmError((e) => ({ ...e, [fleetId]: plausibleRaceInstantError() }));
       return;
@@ -787,11 +823,15 @@ export function RoFleetStartSignalsPanel({
                       type="button"
                       title={`Adds ${postponementMin} min to this fleet start.`}
                       onClick={() => {
-                        let nextT = 0;
-                        setTargets((prev) => {
-                          nextT = prev[tid] + postponeShiftMs;
-                          return { ...prev, [tid]: nextT };
-                        });
+                        const base = targets[tid];
+                        if (base == null || !isPlausibleRaceInstantMs(base)) {
+                          setPersistError(
+                            "Set a valid start time (HH:MM + Apply) before postponement down.",
+                          );
+                          return;
+                        }
+                        const nextT = base + postponeShiftMs;
+                        setTargets((prev) => ({ ...prev, [tid]: nextT }));
                         setPausedAt((p) => {
                           const n = { ...p };
                           delete n[tid];
@@ -860,7 +900,7 @@ export function RoFleetStartSignalsPanel({
       >
         <p className="text-sm font-semibold">New start time after general recall</p>
         <p className="mt-2 text-xs text-splice-ocean dark:text-splice-water">
-          Enter signal time as HH:MM on the club race day ({raceDayYmd}).
+          Enter signal time as HH:MM on the club race day ({recallRaceDayYmd || raceDayYmd}).
         </p>
         <input
           type="text"
