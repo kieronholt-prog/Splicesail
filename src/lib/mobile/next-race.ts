@@ -7,6 +7,7 @@ import { fleetStartUtcMs, homeFeaturedRaceVisibleUntilMs } from "@/lib/tally-win
 import { clubTodayYmd, clubWallYmdFromUtcMs, resolveClubIanaTimeZone } from "@/lib/club-time";
 import { formatClubHmFromIso } from "@/lib/club-display-format";
 import { fleetStartSignalUtcMs } from "@/lib/resolve-fleet-start-signal";
+import { isPlausibleRaceInstantIso } from "@/lib/plausible-race-instant";
 
 const HOME_RACE_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -247,7 +248,9 @@ export async function loadMobileNextRace(
       fleetStartUtcMs(race.scheduled_at, fleetOff);
     const fleetStartUtc = new Date(fleetStartMs).toISOString();
     const fleetStartSource: "start_signal_at" | "scheduled_offset" =
-      fleetRow?.start_signal_at ? "start_signal_at" : "scheduled_offset";
+      fleetRow?.start_signal_at && isPlausibleRaceInstantIso(fleetRow.start_signal_at)
+        ? "start_signal_at"
+        : "scheduled_offset";
     const fleetStartDisplay = formatClubHmFromIso(fleetStartUtc, clubTz);
 
     const classNest = b.boat_classes;

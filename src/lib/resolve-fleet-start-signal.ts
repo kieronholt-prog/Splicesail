@@ -1,3 +1,4 @@
+import { isPlausibleRaceInstantMs } from "@/lib/plausible-race-instant";
 import { fleetStartUtcMs } from "@/lib/tally-window";
 
 export type FleetStartSignalRow = {
@@ -15,7 +16,7 @@ export function fleetStartSignalUtcMs(
   const amended = fleet?.start_signal_at;
   if (amended) {
     const ms = new Date(amended).getTime();
-    if (Number.isFinite(ms)) return ms;
+    if (isPlausibleRaceInstantMs(ms)) return ms;
   }
   if (!raceScheduledAtIso?.trim()) return null;
   return fleetStartUtcMs(raceScheduledAtIso, fleet?.start_offset_minutes ?? 0);

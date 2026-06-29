@@ -15,9 +15,9 @@ function seriesPath(groupId: string, seriesId: string) {
 }
 
 function revalidateRaceStartViews(groupId: string, seriesId: string, raceId: string) {
-  // Keep the RO manage page cache fresh; defer broader invalidation so Apply returns quickly.
-  revalidatePath(managePath(groupId, seriesId, raceId));
+  // Defer all path invalidation so Apply returns before RSC revalidation work.
   after(() => {
+    revalidatePath(managePath(groupId, seriesId, raceId));
     revalidatePath(seriesPath(groupId, seriesId));
     revalidatePath(`/groups/${groupId}/series/${seriesId}/races/${raceId}/finishes`);
     revalidatePath("/");
