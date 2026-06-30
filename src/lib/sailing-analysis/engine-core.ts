@@ -1,6 +1,7 @@
 // @ts-nocheck
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* Auto-extracted from Sailstats index.html */
+import { attachCourseDir, courseDirFromPoint, isUpwindHemisphere } from "./geo-heading";
 const DETECTION_DEFAULTS={
   tack:{minTurn:60,maxTurn:170,minSpeed:1.5,cooldownSec:4,beforePts:4,afterPts:5},
   gybe:{minTurn:45,maxTurn:230,minSpeed:1.8,cooldownSec:7,beforePts:6,afterPts:8},
@@ -1527,9 +1528,11 @@ function weightedCircularMean(items,valueKey,weightKey){
   return((Math.atan2(sx/wSum,sy/wSum)/D)+360)%360;
 }
 
+function ptDir(p){return courseDirFromPoint(p);}
+
 function segmentStats(pts,startIdx,endIdx){
   const segPts=pts.slice(startIdx,endIdx+1);
-  const cogs=segPts.map(p=>p.cog);
+  const cogs=segPts.map(p=>ptDir(p));
   const meanCOG=circularMean(cogs);
   const meanSOG=segPts.length?segPts.reduce((s,p)=>s+ms2k(p.ss||0),0)/segPts.length:0;
   const startTime=pts[startIdx].time;
@@ -1549,7 +1552,7 @@ function detectStableSegments(pts){
   for(let i=0;i<pts.length;i++){
     if(i<3){stable[i]=false;continue;}
     const dt=Math.max(1e-6,pts[i].time-pts[i-3].time);
-    const cogRate=Math.abs(adiff(pts[i-3].cog,pts[i].cog))/dt;
+    const cogRate=Math.abs(adiff(ptDir(pts[i-3]),ptDir(pts[i])))/dt;
     const sogKt=ms2k(pts[i].ss||0);
     stable[i]=cogRate<4&&sogKt>1.5;
     pts[i].cogRate=cogRate;
@@ -1619,7 +1622,7 @@ function classifyCrossingFromPoints(pts,m,windDir){
   let bestUp={d:Infinity,idx:m.idx??s},bestDn={d:Infinity,idx:m.idx??s};
   let prevRel=null,crossIdxUp=null,crossIdxDn=null;
   for(let i=s;i<=e;i++){
-    const rel=((pts[i].cog-windDir+360)%360);
+    const rel=((ptDir(pts[i])-windDir+360)%360);
     const dUp=Math.min(rel,360-rel);
     const dDn=Math.abs(rel-180);
     if(dUp<bestUp.d)bestUp={d:dUp,idx:i};
@@ -1632,16 +1635,35 @@ function classifyCrossingFromPoints(pts,m,windDir){
     }
     prevRel=rel;
   }
+  const preDir=m.preRefCOG??m.preCOG;
+  const postDir=m.postCOG;
+  const preUp=isUpwindHemisphere(preDir,windDir);
+  const postUp=isUpwindHemisphere(postDir,windDir);
   const upTh=relax?48:35,dnTh=relax?52:35;
   const upOK=bestUp.d<=upTh||crossIdxUp!=null;
   const dnOK=bestDn.d<=dnTh||crossIdxDn!=null;
   let kind="none",turnIdx=m.idx??s;
-  if(upOK&&(!dnOK||bestUp.d<=bestDn.d+4)){
+  if(crossIdxUp!=null&&crossIdxDn==null){
+    kind="tack";
+    turnIdx=crossIdxUp;
+  }else if(crossIdxDn!=null&&crossIdxUp==null){
+    kind="gybe";
+    turnIdx=crossIdxDn;
+  }else if(crossIdxUp!=null&&crossIdxDn!=null){
+    kind=bestUp.d<=bestDn.d+4?"tack":"gybe";
+    turnIdx=kind==="tack"?(crossIdxUp??bestUp.idx):(crossIdxDn??bestDn.idx);
+  }else if(upOK&&(!dnOK||bestUp.d<=bestDn.d+4)){
     kind="tack";
     turnIdx=crossIdxUp??bestUp.idx;
   }else if(dnOK){
     kind="gybe";
     turnIdx=crossIdxDn??bestDn.idx;
+  }else if(preUp&&postUp&&Math.abs(adiff(preDir,postDir))>=38){
+    kind="tack";
+    turnIdx=m.idx??s;
+  }else if(!preUp&&!postUp&&Math.abs(adiff(preDir,postDir))>=38){
+    kind="gybe";
+    turnIdx=m.idx??s;
   }
   const preRel=((m.preRefCOG??m.preCOG)-windDir+360)%360;
   const postRel=((m.postCOG)-windDir+360)%360;
@@ -1661,7 +1683,7 @@ function detectMans(pts){
   for(let i=0;i<stableSegments.length-1;i++){
     const segBefore=stableSegments[i],segAfter=stableSegments[i+1];
     const cogChange=Math.abs(adiff(segBefore.meanCOG,segAfter.meanCOG));
-    if(cogChange<=50)continue;
+    if(cogChange<=40)continue;
     const midIdx=Math.max(segBefore.endIdx,Math.min(segAfter.startIdx,Math.round((segBefore.endIdx+segAfter.startIdx)/2)));
     const preRef=preReferenceFromSegment(pts,segBefore);
     manoeuvres.push({
@@ -1745,7 +1767,7 @@ function applyDetectionSettings(manoeuvres,pts,det){
     const bPts=Math.max(1,parseInt(cfg.beforePts??4,10));
     const aPts=Math.max(1,parseInt(cfg.afterPts??5,10));
     const bIdx=Math.max(0,idx-bPts),aIdx=Math.min((pts?.length||1)-1,idx+aPts);
-    const turnRef=(pts?.[bIdx]&&pts?.[aIdx])?Math.abs(adiff(pts[bIdx].cog,pts[aIdx].cog)):Math.abs(Number(m.ch)||0);
+    const turnRef=(pts?.[bIdx]&&pts?.[aIdx])?Math.abs(adiff(ptDir(pts[bIdx]),ptDir(pts[aIdx]))):Math.abs(Number(m.ch)||0);
     const turn=turnRef;
     if(turn<cfg.minTurn||turn>cfg.maxTurn)continue;
     const speed=ms2k(pts?.[idx]?.ss ?? m.preRefSpeed ?? m.preSpeed ?? 0);
@@ -1753,7 +1775,7 @@ function applyDetectionSettings(manoeuvres,pts,det){
     const t=Number(m.time ?? pts?.[idx]?.time ?? 0);
     if(!Number.isFinite(t))continue;
     if(t-lastByType[m.type]<cfg.cooldownSec)continue;
-    out.push({...m,ch:turn,cogB:pts?.[bIdx]?.cog??m.cogB,cogA:pts?.[aIdx]?.cog??m.cogA});
+    out.push({...m,ch:turn,cogB:pts?.[bIdx]?ptDir(pts[bIdx]):m.cogB,cogA:pts?.[aIdx]?ptDir(pts[aIdx]):m.cogA});
     lastByType[m.type]=t;
   }
   return out;
@@ -1926,7 +1948,11 @@ function classifySides(manoeuvres,seedWind){
 }
 
 function deriveWindAndClassify(manoeuvres,stableSegments,userWind,pts=null,windTuning=null){
-  const seed=userWind!=null?{dir:Number(userWind)%360,conf:1}:initialWindFromStableSegments(stableSegments,pts,windTuning);
+  const seed=userWind!=null
+    ?{dir:Number(userWind)%360,conf:1}
+    :windTuning?.baselineWindFromDeg!=null&&Number.isFinite(Number(windTuning.baselineWindFromDeg))
+    ?{dir:Number(windTuning.baselineWindFromDeg)%360,conf:0.78}
+    :initialWindFromStableSegments(stableSegments,pts,windTuning);
   const allAngles=manoeuvres.map(m=>m.cogChange).sort((a,b)=>a-b);
   const med=allAngles.length?allAngles[Math.floor(allAngles.length/2)]:90;
   const hi=manoeuvres.filter(m=>Math.abs(m.cogChange-med)<=15);
@@ -2129,7 +2155,7 @@ function scoreTackManoeuvre(m,pts,baselines,windTrace,windDir){
   }
   let headingConvergence=30;
   for(let i=startIdx;i<=endSearch;i++){
-    const ok=Math.abs(adiff(pts[i].cog,target.targetCOG))<=5&&i+2<=endSearch&&Math.abs(adiff(pts[i+1].cog,target.targetCOG))<=5&&Math.abs(adiff(pts[i+2].cog,target.targetCOG))<=5;
+    const ok=Math.abs(adiff(ptDir(pts[i]),target.targetCOG))<=5&&i+2<=endSearch&&Math.abs(adiff(ptDir(pts[i+1]),target.targetCOG))<=5&&Math.abs(adiff(ptDir(pts[i+2]),target.targetCOG))<=5;
     if(ok){headingConvergence=Math.round(Math.max(0,pts[i].time-pts[startIdx].time));break;}
   }
   const sampleEnd=Math.min(pts.length-1,secondsIndexFrom(pts,startIdx,speedRecovery));
@@ -2138,11 +2164,11 @@ function scoreTackManoeuvre(m,pts,baselines,windTrace,windDir){
   let vmgCost=0;
   for(let i=startIdx;i<=sampleEnd;i++){
     const w=windAtTime(windTrace,pts[i].time,localWind);
-    const actual=ms2k(pts[i].ss||0)*Math.cos(Math.abs(adiff(pts[i].cog,w))*D);
+    const actual=ms2k(pts[i].ss||0)*Math.cos(Math.abs(adiff(ptDir(pts[i]),w))*D);
     const deficit=Math.max(0,preVmg-actual);
     vmgCost+=deficit*0.514444*(pts[i].dt||1);
   }
-  const biasSamples=pts.slice(startIdx,Math.min(pts.length,startIdx+6)).map(p=>adiff(target.targetCOG,p.cog));
+  const biasSamples=pts.slice(startIdx,Math.min(pts.length,startIdx+6)).map(p=>adiff(target.targetCOG,ptDir(p)));
   const exitBiasAmount=biasSamples.length?biasSamples.reduce((s,x)=>s+x,0)/biasSamples.length:0;
   const exitBias=Math.abs(exitBiasAmount)<=3?"neutral":exitBiasAmount<0?"high":"low";
   return{
@@ -3245,11 +3271,11 @@ function computeTackLegStatsByType(en,legs,wd,legType,roundingMask=null){
       if(skip(i))continue;
       const p=en[i],s=ms2k(p.ss||0);
       if(s<0.3)continue;
-      const vmg=vmgToWindKts(s,p.cog,wd);
+      const vmg=vmgToWindKts(s,ptDir(p),wd);
       if(vmg==null||!Number.isFinite(vmg))continue;
       const w=pointTimeWeightSec(en,i);
-      const o={s,cog:p.cog,vmg,w};
-      const r=((p.cog-wd+360)%360);
+      const o={s,cog:ptDir(p),vmg,w};
+      const r=((ptDir(p)-wd+360)%360);
       if(r>180)stbd.push(o);else port.push(o);
     }
   }
@@ -3292,7 +3318,7 @@ function computeMaxSpeedHighlight(en,legs,wd){
   en.forEach((p,i)=>{const s=ms2k(p.ss||0);if(s>bestS){bestS=s;bestI=i;}});
   if(bestI<0||bestS<0)return null;
   const p=en[bestI],t0=en[0].time;
-  const twaSample=acuteTwaFromWindDeg(p.cog,wd);
+  const twaSample=acuteTwaFromWindDeg(ptDir(p),wd);
   let leg=null;
   for(const l of legs||[]){
     if(bestI>=l.startIdx&&bestI<=l.endIdx){leg=l;break;}
@@ -3399,10 +3425,10 @@ function radarDualVmgBinsByWindHeading(analysis,windFromDeg){
       if(s<0.5)continue;
       const lt=legTypeAtAbsTime(analysis,p.time);
       if(lt!=="upwind"&&lt!=="downwind")continue;
-      const vw=vmgToWindKts(s,p.cog,wd);
+      const vw=vmgToWindKts(s,ptDir(p),wd);
       if(vw==null||!Number.isFinite(vw))continue;
       const vm=lt==="downwind"?-vw:vw;
-      const rH=((p.cog-wd+360)%360);
+      const rH=((ptDir(p)-wd+360)%360);
       const bk=Math.round(rH/15)*15%360;
       const bag=(lt==="upwind"?upAb:dnAb)[bk];
       if(bag){
@@ -3428,13 +3454,13 @@ function radarDualVmgBinsByWindHeading(analysis,windFromDeg){
 /** COG (°) at absolute time — linear blend on sin/cos for angle correctness. */
 function cogDegAtTime(pts,tAbs){
   if(!pts?.length||!Number.isFinite(tAbs))return null;
-  if(tAbs<=pts[0].time)return Number(pts[0].cog);
-  if(tAbs>=pts[pts.length-1].time)return Number(pts[pts.length-1].cog);
+  if(tAbs<=pts[0].time)return Number(ptDir(pts[0]));
+  if(tAbs>=pts[pts.length-1].time)return Number(ptDir(pts[pts.length-1]));
   for(let i=1;i<pts.length;i++){
     if(tAbs<=pts[i].time){
       const a=pts[i-1],b=pts[i];
-      const u=(tAbs-a.time)/Math.max(1e-6,b.time-a.time),s0=Math.sin(Number(a.cog)*D),c0=Math.cos(Number(a.cog)*D);
-      const s1=Math.sin(Number(b.cog)*D),c1=Math.cos(Number(b.cog)*D);
+      const u=(tAbs-a.time)/Math.max(1e-6,b.time-a.time),s0=Math.sin(Number(ptDir(a))*D),c0=Math.cos(Number(ptDir(a))*D);
+      const s1=Math.sin(Number(ptDir(b))*D),c1=Math.cos(Number(ptDir(b))*D);
       const s=s0+u*(s1-s0),c=c0+u*(c1-c0);
       return((Math.atan2(s,c)/D)+360)%360;
     }
@@ -3787,6 +3813,7 @@ function runAnalysis(rawPts,userWind=null,markPositions=null,laps=1,preamble=nul
   const sorted=[...rawPts].sort((a,b)=>a.time-b.time);
   const deduped=sorted.filter((p,i)=>i===0||p.time!==sorted[i-1].time);
   const en=enrich(deduped);
+  attachCourseDir(en);
   const sogArr=sm(en.map(p=>p.sog),7);
   en.forEach((p,i)=>{p.ss=sogArr[i]});
 
@@ -3910,7 +3937,7 @@ function runAnalysis(rawPts,userWind=null,markPositions=null,laps=1,preamble=nul
         const p=en[i];
         const s=ms2k(p.ss||0);
         if(s<0.3)continue;
-        const v=vmgToWindKts(s,p.cog,wd);
+        const v=vmgToWindKts(s,ptDir(p),wd);
         if(v==null||!Number.isFinite(v))continue;
         vmgs.push(v);
         wts.push(pointTimeWeightSec(en,i));
@@ -3952,7 +3979,7 @@ function runAnalysis(rawPts,userWind=null,markPositions=null,laps=1,preamble=nul
   const speedTL=buildSpeedTimeSeries(en,maxSpeedMark);
 
   let portS=0,stbdS=0;
-  en.forEach(p=>{if(ms2k(p.ss)<0.5)return;const r=((p.cog-wd+360)%360);if(r>180)stbdS++;else portS++});
+  en.forEach(p=>{if(ms2k(p.ss)<0.5)return;const r=((ptDir(p)-wd+360)%360);if(r>180)stbdS++;else portS++});
 
   const upwindByTack=computeTackLegStatsByType(en,legs,wd,"upwind",roundingPointMask);
   const reachByTack=computeTackLegStatsByType(en,legs,wd,"reach",roundingPointMask);

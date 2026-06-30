@@ -37,6 +37,14 @@ pending_confirm → pending_mode → pending_setup → ready   (standalone)
 
 Collated mode requires `profiles.share_track_for_enhanced_analytics` and at least one club course (non-custom). The RO confirms **course letter and laps per race fleet** on the track-analysis page (preset before uploads is supported); mark drag positions are stored in `race_fleet_analysis_settings.mark_overrides`. Fleet assignment uses the tagged boat matched to `race_fleets` rules (class or PY), same as Manage — a series signup alone is enough once race fleets exist on the race.
 
+### Tack / gybe and wind (analysis engine)
+
+Implemented in [`src/lib/sailing-analysis/engine-core.ts`](../src/lib/sailing-analysis/engine-core.ts) with helpers in [`geo-heading.ts`](../src/lib/sailing-analysis/geo-heading.ts) and [`course-wind-baseline.ts`](../src/lib/sailing-analysis/course-wind-baseline.ts):
+
+- **Course direction:** `heading` / `hdg` when present on track points (phone attitude sidecar), else GPS **COG** — used for manoeuvre detection, tack/gybe classification, and VMG.
+- **Baseline wind:** when RO sets **windward mark** on the course, true-wind **FROM** is seeded from the course axis (bearing windward → previous mark, reversed). RO `wind_direction` overrides when set; otherwise auto-refinement from upwind segments and opposite-tack geometry still applies.
+- **Tack vs gybe:** crossing the **upwind** wind line (0° relative to wind FROM) → tack; **downwind** line (180°) → gybe, with hemisphere fallbacks aligned to the phone VMG engine (`|TWA| < 90°` = upwind).
+
 ### Automatic track → race matching
 
 Implemented in [`src/lib/track-race-matching.ts`](../src/lib/track-race-matching.ts):

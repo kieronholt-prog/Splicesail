@@ -5,6 +5,7 @@ import {
   runAnalysis,
 } from "./engine-core";
 import type { DetectionSettings } from "./types";
+import { buildWindTuningFromCourse } from "./course-wind-baseline";
 import {
   buildMarkPositionsFromClubData,
   startFinishLineFromSetup,
@@ -56,6 +57,13 @@ export function executeAnalysis(input: AnalysisRunInput) {
     input.windwardMarkName ??
     null;
 
+  const windTuning = buildWindTuningFromCourse(
+    preamble,
+    markPositions,
+    windward,
+    input.laps ?? 1,
+  );
+
   return runAnalysis(
     pts as never,
     (input.userWind ?? null) as never,
@@ -64,7 +72,7 @@ export function executeAnalysis(input: AnalysisRunInput) {
     preamble as never,
     (input.detSettings ?? DETECTION_DEFAULTS) as never,
     sfLine as never,
-    null,
+    windTuning as never,
     input.gpsToBowM ?? 2,
     windward as never,
     null,

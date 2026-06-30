@@ -2,20 +2,43 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseFIT, parseGPX } from "@/lib/sailing-analysis";
 import { fetchStravaTrackPoints, getStravaConnection } from "@/lib/strava";
 
-export type TrackPointRow = { lat: number; lon: number; time: number };
+export type TrackPointRow = {
+  lat: number;
+  lon: number;
+  time: number;
+  hdg?: number;
+  heading?: number;
+  heel?: number;
+  turn?: number;
+};
 
 export function normalizeTrackPoints(raw: unknown): TrackPointRow[] {
   if (!Array.isArray(raw)) return [];
   const out: TrackPointRow[] = [];
   for (const p of raw) {
     if (p == null || typeof p !== "object") continue;
-    const row = p as { lat?: unknown; lon?: unknown; time?: unknown };
+    const row = p as {
+      lat?: unknown;
+      lon?: unknown;
+      time?: unknown;
+      t?: unknown;
+      hdg?: unknown;
+      heading?: unknown;
+      heel?: unknown;
+      turn?: unknown;
+    };
     const lat = Number(row.lat);
     const lon = Number(row.lon);
-    const time = Number(row.time);
-    if (Number.isFinite(lat) && Number.isFinite(lon) && Number.isFinite(time)) {
-      out.push({ lat, lon, time });
-    }
+    const time = Number(row.time ?? row.t);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(time)) continue;
+    const pt: TrackPointRow = { lat, lon, time };
+    const hdg = Number(row.hdg ?? row.heading);
+    if (Number.isFinite(hdg)) pt.hdg = hdg;
+    const heel = Number(row.heel);
+    if (Number.isFinite(heel)) pt.heel = heel;
+    const turn = Number(row.turn);
+    if (Number.isFinite(turn)) pt.turn = turn;
+    out.push(pt);
   }
   return out;
 }

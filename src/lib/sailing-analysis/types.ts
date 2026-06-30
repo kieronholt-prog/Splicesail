@@ -4,6 +4,13 @@ export type TrackPoint = {
   time: number | null;
   sog?: number;
   cog?: number;
+  /** Compass heading (°); preferred over COG for tack/gybe when set. */
+  hdg?: number;
+  heading?: number;
+  heel?: number;
+  turn?: number;
+  /** Analysis: hdg ?? cog, set during enrich. */
+  dir?: number;
   dist?: number;
   ss?: number;
 };
