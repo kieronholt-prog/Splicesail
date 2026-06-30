@@ -158,9 +158,9 @@ export function RoTrackAnalysisFleetPanel({
 
         {pendingCount > 0 && fleetTracks.length === 0 ? (
           <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
-            Tracks are queued but GPS is not available yet. Ask sailors to re-open their track and confirm
-            collated mode (Strava), or apply migration{" "}
-            <code className="text-xs">20261705120000_track_points_cache</code> and refresh.
+            Tracks are queued but GPS is not on the map yet. For Strava activities, ask the sailor to
+            re-open their track and confirm collated mode (this caches GPS for race staff). Uploaded GPX/FIT
+            files should appear automatically — try refreshing this page.
           </p>
         ) : null}
 

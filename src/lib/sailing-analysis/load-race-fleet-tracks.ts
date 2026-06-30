@@ -130,7 +130,7 @@ export async function loadRaceFleetTracks(
 
   for (const raw of subs ?? []) {
     const sub = raw as FleetSubmissionRow;
-    const subFleetId = await resolveSubmissionRaceFleetId(supabase, sub);
+    const subFleetId = await resolveSubmissionRaceFleetId(supabase, { ...sub, race_id: raceId });
     if (!submissionMatchesFleet(subFleetId, opts?.raceFleetId)) continue;
 
     const points = await resolveFleetTrackPoints(supabase, sub);
@@ -175,7 +175,7 @@ export async function countPendingCollatedByFleet(
 
   const counts = new Map<string | null, number>();
   for (const sub of subs ?? []) {
-    const fleetId = await resolveSubmissionRaceFleetId(supabase, sub);
+    const fleetId = await resolveSubmissionRaceFleetId(supabase, { ...sub, race_id: raceId });
     counts.set(fleetId, (counts.get(fleetId) ?? 0) + 1);
   }
   return counts;

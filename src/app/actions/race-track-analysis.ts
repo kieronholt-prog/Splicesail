@@ -315,23 +315,24 @@ export async function countPendingRaceTrackAnalysis(groupId: string): Promise<nu
 
 /** Load map overlay tracks for one fleet (client-side fleet switch on track-analysis). */
 export async function loadRaceFleetTracksAction(
+  groupId: string,
   raceId: string,
   raceFleetId: string,
 ): Promise<FleetTrackOverlay[]> {
   const { supabase, user } = await getServerAuth();
-  if (!user) return [];
-
-  const { data: race } = await supabase.from("races").select("id, group_id").eq("id", raceId).maybeSingle();
-  if (!race?.group_id) return [];
+  if (!user || !groupId) return [];
 
   const { data: me } = await supabase
     .from("group_memberships")
     .select("role")
-    .eq("group_id", race.group_id)
+    .eq("group_id", groupId)
     .eq("user_id", user.id)
     .maybeSingle();
 
   if (me?.role !== "club_admin" && me?.role !== "race_officer") return [];
+
+  const { data: race } = await supabase.from("races").select("id").eq("id", raceId).maybeSingle();
+  if (!race) return [];
 
   return loadRaceFleetTracks(supabase, raceId, { raceFleetId });
 }

@@ -53,7 +53,7 @@ export function RoTrackAnalysisSetupForm({
 
     let cancelled = false;
     setLoadingFleetTracks(true);
-    void loadRaceFleetTracksAction(raceId, selectedFleetId)
+    void loadRaceFleetTracksAction(groupId, raceId, selectedFleetId)
       .then((tracks) => {
         if (cancelled) return;
         setFleetTracksByFleetId((prev) => ({ ...prev, [selectedFleetId]: tracks }));
@@ -66,7 +66,7 @@ export function RoTrackAnalysisSetupForm({
     return () => {
       cancelled = true;
     };
-  }, [raceId, selectedFleetId]);
+  }, [groupId, raceId, selectedFleetId]);
 
   const selectedFleet = raceFleets.find((f) => f.id === selectedFleetId) ?? null;
 
