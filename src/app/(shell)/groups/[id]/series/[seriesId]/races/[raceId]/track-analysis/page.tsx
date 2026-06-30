@@ -179,6 +179,13 @@ export default async function RoTrackAnalysisPage({ params, searchParams }: Prop
         <p className="mt-6 text-sm text-splice-ocean dark:text-splice-water">
           {race.name}
           {race.scheduled_at ? ` · ${new Date(race.scheduled_at).toLocaleString()}` : ""}
+          {" · "}
+          <Link
+            href={`/groups/${groupId}/series/${seriesId}/races/${raceId}/track-compare`}
+            className="underline"
+          >
+            Fleet compare
+          </Link>
         </p>
 
         {error || loadError ? (

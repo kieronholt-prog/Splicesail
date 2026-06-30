@@ -51,6 +51,30 @@ Implemented in [`src/lib/track-race-matching.ts`](../src/lib/track-race-matching
 
 Engine ported from Sailstats into [`src/lib/sailing-analysis/engine-core.ts`](../src/lib/sailing-analysis/engine-core.ts). Public entry: `executeAnalysis()` in `run-analysis-wrapper.ts`.
 
+## Mobile API (Splice Phone)
+
+Bearer token auth (`Authorization: Bearer <supabase_access_token>`). Implemented in [`src/lib/supabase/mobile-route.ts`](../src/lib/supabase/mobile-route.ts).
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/mobile/next-race` | Featured race + tally board (boats, fleet start, postponement) |
+| POST | `/api/mobile/tally` | Tally afloat / ashore / undo afloat |
+| GET | `/api/mobile/recent-results` | Sailor's recent race finishes (position or elapsed/corrected) |
+| GET | `/api/mobile/track-submissions` | List track submissions; `?id=` for detail + `race_track_analyses` |
+| POST | `/api/mobile/tracks` | Register phone session → `race_track_submissions` draft linked to `race_entry_id` |
+| GET | `/api/mobile/race-context/[raceEntryId]` | Finish + linked track analysis for one entry |
+| GET | `/api/mobile/races/[raceId]/fleet-analyses` | Collated fleet peers (privacy-gated) |
+| POST | `/api/mobile/races/[raceId]/fleet-analyses` | Two-boat compare (`leftSubmissionId`, `rightSubmissionId`) |
+
+Shared libs: [`src/lib/mobile/`](../src/lib/mobile/), compare math in [`compare-analyses.ts`](../src/lib/sailing-analysis/compare-analyses.ts).
+
+## Race context & fleet compare (web)
+
+| Path | Purpose |
+|------|---------|
+| `…/races/[raceId]/entries/[raceEntryId]/context` | Race result + track analysis hub per `race_entry_id` |
+| `…/races/[raceId]/track-compare` | Two-boat fleet compare (collated, same fleet, `ready`) |
+
 ## Notifications
 
 In-app only (phase 1): home dashboard banner and **Tracks** nav badge when analysis is `ready` and `ready_notified_at` is null. Email deferred.
