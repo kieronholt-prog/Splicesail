@@ -1,10 +1,14 @@
 import { createServerClient } from "@supabase/ssr";
-import { underDevelopmentGate } from "@/lib/under-development";
+import {
+  shouldGateUnderDevelopment,
+  underDevelopmentBypassRedirect,
+  underDevelopmentGateResponse,
+} from "@/lib/under-development";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function proxy(request: NextRequest) {
-  const gated = underDevelopmentGate(request);
-  if (gated) return gated;
+  const bypassRedirect = underDevelopmentBypassRedirect(request);
+  if (bypassRedirect) return bypassRedirect;
 
   let supabaseResponse = NextResponse.next({
     request,
@@ -14,6 +18,9 @@ export async function proxy(request: NextRequest) {
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !anonKey) {
+    if (shouldGateUnderDevelopment(request, false)) {
+      return underDevelopmentGateResponse(request);
+    }
     return supabaseResponse;
   }
 
@@ -36,7 +43,13 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (shouldGateUnderDevelopment(request, Boolean(user))) {
+    return underDevelopmentGateResponse(request);
+  }
 
   supabaseResponse.headers.set("x-pathname", request.nextUrl.pathname);
   return supabaseResponse;

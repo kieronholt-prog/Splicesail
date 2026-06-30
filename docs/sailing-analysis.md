@@ -55,6 +55,8 @@ Engine ported from Sailstats into [`src/lib/sailing-analysis/engine-core.ts`](..
 
 Bearer token auth (`Authorization: Bearer <supabase_access_token>`). Implemented in [`src/lib/supabase/mobile-route.ts`](../src/lib/supabase/mobile-route.ts).
 
+When `SPLICE_UNDER_DEVELOPMENT=1` on production, `/api/mobile/*` remains reachable for the phone app; sign in on the web to access RO pages such as track analysis.
+
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/api/mobile/next-race` | Featured race + tally board (boats, fleet start, postponement) |
