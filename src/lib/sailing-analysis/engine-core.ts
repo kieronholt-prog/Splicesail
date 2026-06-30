@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* Auto-extracted from Sailstats index.html */
 import { attachCourseDir, courseDirFromPoint, isUpwindHemisphere } from "./geo-heading";
+import { classifyManoeuvreByWindCrossing } from "./manoeuvre-wind-crossing";
 const DETECTION_DEFAULTS={
   tack:{minTurn:60,maxTurn:170,minSpeed:1.5,cooldownSec:4,beforePts:4,afterPts:5},
   gybe:{minTurn:45,maxTurn:230,minSpeed:1.8,cooldownSec:7,beforePts:6,afterPts:8},
@@ -1612,69 +1613,7 @@ function crossingSide(preCOG,postCOG,refDir){
 }
 
 function classifyCrossingFromPoints(pts,m,windDir){
-  if(!pts?.length||!m?.preSegment||!m?.postSegment){
-    return{kind:"none",turnIdx:m?.idx??0,crossing:null,sideBef:m?.sideBef??null,sideAft:m?.sideAft??null};
-  }
-  const relax=!!m._early;
-  const padPre=relax?12:5,padPost=relax?14:6;
-  const s=Math.max(0,m.preSegment.endIdx-padPre);
-  const e=Math.min(pts.length-1,m.postSegment.startIdx+padPost);
-  let bestUp={d:Infinity,idx:m.idx??s},bestDn={d:Infinity,idx:m.idx??s};
-  let prevRel=null,crossIdxUp=null,crossIdxDn=null;
-  for(let i=s;i<=e;i++){
-    const rel=((ptDir(pts[i])-windDir+360)%360);
-    const dUp=Math.min(rel,360-rel);
-    const dDn=Math.abs(rel-180);
-    if(dUp<bestUp.d)bestUp={d:dUp,idx:i};
-    if(dDn<bestDn.d)bestDn={d:dDn,idx:i};
-    if(prevRel!=null){
-      const upCross=Math.sign(adiff(0,prevRel))!==Math.sign(adiff(0,rel));
-      const dnCross=Math.sign(adiff(180,prevRel))!==Math.sign(adiff(180,rel));
-      if(crossIdxUp==null&&upCross)crossIdxUp=i;
-      if(crossIdxDn==null&&dnCross)crossIdxDn=i;
-    }
-    prevRel=rel;
-  }
-  const preDir=m.preRefCOG??m.preCOG;
-  const postDir=m.postCOG;
-  const preUp=isUpwindHemisphere(preDir,windDir);
-  const postUp=isUpwindHemisphere(postDir,windDir);
-  const upTh=relax?48:35,dnTh=relax?52:35;
-  const upOK=bestUp.d<=upTh||crossIdxUp!=null;
-  const dnOK=bestDn.d<=dnTh||crossIdxDn!=null;
-  let kind="none",turnIdx=m.idx??s;
-  if(crossIdxUp!=null&&crossIdxDn==null){
-    kind="tack";
-    turnIdx=crossIdxUp;
-  }else if(crossIdxDn!=null&&crossIdxUp==null){
-    kind="gybe";
-    turnIdx=crossIdxDn;
-  }else if(crossIdxUp!=null&&crossIdxDn!=null){
-    kind=bestUp.d<=bestDn.d+4?"tack":"gybe";
-    turnIdx=kind==="tack"?(crossIdxUp??bestUp.idx):(crossIdxDn??bestDn.idx);
-  }else if(upOK&&(!dnOK||bestUp.d<=bestDn.d+4)){
-    kind="tack";
-    turnIdx=crossIdxUp??bestUp.idx;
-  }else if(dnOK){
-    kind="gybe";
-    turnIdx=crossIdxDn??bestDn.idx;
-  }else if(preUp&&postUp&&Math.abs(adiff(preDir,postDir))>=38){
-    kind="tack";
-    turnIdx=m.idx??s;
-  }else if(!preUp&&!postUp&&Math.abs(adiff(preDir,postDir))>=38){
-    kind="gybe";
-    turnIdx=m.idx??s;
-  }
-  const preRel=((m.preRefCOG??m.preCOG)-windDir+360)%360;
-  const postRel=((m.postCOG)-windDir+360)%360;
-  const sideBef=preRel>180?"S":"P";
-  const sideAft=postRel>180?"S":"P";
-  const crossing=sideBef==="P"&&sideAft==="S"?"P→S":sideBef==="S"&&sideAft==="P"?"S→P":"—";
-  if(kind==="none"&&relax&&crossing!=="—"&&Math.abs(adiff(m.preCOG,m.postCOG))>=38){
-    kind="tack";
-    turnIdx=crossIdxUp??crossIdxDn??m.idx??s;
-  }
-  return{kind,turnIdx,crossing,sideBef,sideAft};
+  return classifyManoeuvreByWindCrossing(pts,m,windDir);
 }
 
 function detectMans(pts){

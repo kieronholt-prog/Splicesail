@@ -43,7 +43,7 @@ Implemented in [`src/lib/sailing-analysis/engine-core.ts`](../src/lib/sailing-an
 
 - **Course direction:** `heading` / `hdg` when present on track points (phone attitude sidecar), else GPS **COG** — used for manoeuvre detection, tack/gybe classification, and VMG.
 - **Baseline wind:** when RO sets **windward mark** on the course, true-wind **FROM** is seeded from the course axis (bearing windward → previous mark, reversed). RO `wind_direction` overrides when set; otherwise auto-refinement from upwind segments and opposite-tack geometry still applies.
-- **Tack vs gybe:** crossing the **upwind** wind line (0° relative to wind FROM) → tack; **downwind** line (180°) → gybe, with hemisphere fallbacks aligned to the phone VMG engine (`|TWA| < 90°` = upwind).
+- **Tack vs gybe:** [`manoeuvre-wind-crossing.ts`](../src/lib/sailing-analysis/manoeuvre-wind-crossing.ts) — **only** wind-axis crossings in the turn window. **Tack** = course direction crosses head-to-wind (0° relative to wind FROM), both legs upwind (`|TWA| < 90°`), port/starboard side flips. **Gybe** = crosses dead downwind (180° relative), both legs downwind, side flips. No proximity-only or large-angle fallbacks.
 
 ### Automatic track → race matching
 
