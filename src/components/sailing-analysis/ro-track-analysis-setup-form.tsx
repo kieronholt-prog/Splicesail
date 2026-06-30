@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   RoTrackAnalysisFleetPanel,
   type RaceFleetVm,
@@ -47,22 +47,21 @@ export function RoTrackAnalysisSetupForm({
   const [selectedFleetId, setSelectedFleetId] = useState<string | null>(defaultFleetId);
   const [fleetTracksByFleetId, setFleetTracksByFleetId] = useState(initialFleetTracksByFleetId);
   const [loadingFleetTracks, setLoadingFleetTracks] = useState(false);
-  const serverLoadedFleetIds = useRef(
-    new Set(initialFleetId ? [initialFleetId] : []),
-  );
 
   useEffect(() => {
     if (!selectedFleetId) return;
-    if (serverLoadedFleetIds.current.has(selectedFleetId)) return;
 
     let cancelled = false;
     setLoadingFleetTracks(true);
-    void loadRaceFleetTracksAction(raceId, selectedFleetId).then((tracks) => {
-      if (cancelled) return;
-      serverLoadedFleetIds.current.add(selectedFleetId);
-      setFleetTracksByFleetId((prev) => ({ ...prev, [selectedFleetId]: tracks }));
-      setLoadingFleetTracks(false);
-    });
+    void loadRaceFleetTracksAction(raceId, selectedFleetId)
+      .then((tracks) => {
+        if (cancelled) return;
+        setFleetTracksByFleetId((prev) => ({ ...prev, [selectedFleetId]: tracks }));
+        setLoadingFleetTracks(false);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadingFleetTracks(false);
+      });
 
     return () => {
       cancelled = true;

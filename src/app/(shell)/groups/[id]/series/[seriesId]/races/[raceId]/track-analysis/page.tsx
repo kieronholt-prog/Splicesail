@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { RoTrackAnalysisSetupForm } from "@/components/sailing-analysis/ro-track-analysis-setup-form";
-import { fleetStartLabel } from "@/components/sailing-analysis/ro-track-analysis-fleet-panel";
+import { RoTrackAnalysisSetupFormClient } from "@/components/sailing-analysis/ro-track-analysis-setup-form-client";
+import { fleetStartLabel } from "@/lib/ro-fleet-start-label";
 import { getServerAuth } from "@/lib/supabase/auth-cache";
 import {
   countPendingCollatedByFleet,
-  loadRaceFleetTracks,
 } from "@/lib/sailing-analysis/load-race-fleet-tracks";
 import {
   ensureFleetAnalysisSettingsRow,
@@ -111,37 +110,36 @@ export default async function RoTrackAnalysisPage({ params, searchParams }: Prop
     q.fleet && raceFleets.some((f) => f.id === q.fleet) ? q.fleet : (raceFleets[0]?.id ?? null);
 
   const settingsByFleetId: Record<string, RaceFleetAnalysisSettingsRow | null> = {};
-  const fleetTracksByFleetId: Record<string, Awaited<ReturnType<typeof loadRaceFleetTracks>>> = {};
+  const fleetTracksByFleetId: Record<string, []> = {};
   const pendingByFleetId: Record<string, number> = {};
   const raceStartByFleetId: Record<string, { unixSec: number | null; sec: number }> = {};
 
   if (!settingsTableMissing) {
-    for (const f of raceFleets) {
-      await ensureFleetAnalysisSettingsRow(supabase, {
-        raceId,
-        raceFleetId: f.id,
-        groupId,
-      });
-    }
+    await Promise.all(
+      raceFleets.map((f) =>
+        ensureFleetAnalysisSettingsRow(supabase, {
+          raceId,
+          raceFleetId: f.id,
+          groupId,
+        }),
+      ),
+    );
     settingsMap = await loadRaceFleetAnalysisSettingsMap(supabase, raceId);
   }
 
-  for (const f of raceFleets) {
-    settingsByFleetId[f.id] = settingsMap.get(f.id) ?? null;
-    const loadTracks = f.id === initialFleetId;
-    fleetTracksByFleetId[f.id] = loadTracks
-      ? await loadRaceFleetTracks(supabase, raceId, { raceFleetId: f.id })
-      : [];
-    pendingByFleetId[f.id] = pendingByFleet.get(f.id) ?? 0;
+  await Promise.all(
+    raceFleets.map(async (f) => {
+      settingsByFleetId[f.id] = settingsMap.get(f.id) ?? null;
+      fleetTracksByFleetId[f.id] = [];
+      pendingByFleetId[f.id] = pendingByFleet.get(f.id) ?? 0;
 
-    const previewTrack = fleetTracksByFleetId[f.id][0]?.points ?? [];
-    const firstGps = previewTrack.find((p) => p.time != null)?.time ?? previewTrack[0]?.time;
-    const fleetStartUtcMs = await resolveFleetStartUtcMs(supabase, raceId, f.id);
-    raceStartByFleetId[f.id] = {
-      unixSec: fleetStartUtcMs != null ? Math.round(fleetStartUtcMs / 1000) : null,
-      sec: raceStartSecAfterFirstGps(fleetStartUtcMs, firstGps ?? null),
-    };
-  }
+      const fleetStartUtcMs = await resolveFleetStartUtcMs(supabase, raceId, f.id);
+      raceStartByFleetId[f.id] = {
+        unixSec: fleetStartUtcMs != null ? Math.round(fleetStartUtcMs / 1000) : null,
+        sec: raceStartSecAfterFirstGps(fleetStartUtcMs, null),
+      };
+    }),
+  );
 
   const unassignedPending = pendingByFleet.get(null) ?? 0;
   const courseRows = courses ?? [];
@@ -295,7 +293,7 @@ export default async function RoTrackAnalysisPage({ params, searchParams }: Prop
             </div>
           ) : null}
 
-          <RoTrackAnalysisSetupForm
+          <RoTrackAnalysisSetupFormClient
             groupId={groupId}
             raceId={raceId}
             seriesId={seriesId}

@@ -26,7 +26,6 @@ import { markNamesForCourse } from "@/lib/sailing-analysis/course-mark-names";
 import type { StartFinishLineEnds } from "@/lib/sailing-analysis/analysis-types";
 import type { FleetTrackOverlay } from "@/lib/sailing-analysis/load-race-fleet-tracks";
 import type { RaceFleetAnalysisSettingsRow } from "@/lib/sailing-analysis/race-fleet-analysis-settings";
-import { formatClubHmFromIso } from "@/lib/club-display-format";
 
 export type RaceFleetVm = {
   id: string;
@@ -208,12 +207,4 @@ export function RoTrackAnalysisFleetPanel({
       </form>
     </div>
   );
-}
-
-export function fleetStartLabel(
-  startSignalAt: string | null | undefined,
-  clubTz: string,
-): string | null {
-  if (!startSignalAt) return null;
-  return formatClubHmFromIso(startSignalAt, clubTz);
 }
