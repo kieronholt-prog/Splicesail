@@ -34,6 +34,6 @@ export function buildGateOverlayFC(
   return buildOneSidedGateFC(
     seqRows(fullSeq),
     120,
-    sf,
+    sf as never,
   ) as GeoJSON.FeatureCollection;
 }

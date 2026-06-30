@@ -19,21 +19,21 @@ export function courseToDisplayEntries(c: SailingCourseRow): MarkEntry[] {
     }));
   }
 
-  const pre = ((c.marks_preamble ?? []) as [string, "P" | "S"][]).map(([name, tack]) => ({
+  const preambleEntries = ((c.marks_preamble ?? []) as [string, "P" | "S"][]).map(([name, tack]) => ({
     name,
     tack,
     partOfLap: false,
   }));
-  const seq = ((c.mark_sequence ?? []) as [string, "P" | "S"][]).map(([name, tack]) => ({
+  const sequenceEntries = ((c.mark_sequence ?? []) as [string, "P" | "S"][]).map(([name, tack]) => ({
     name,
     tack,
     partOfLap: true,
   }));
 
-  if (pre.length > 0 && seq.length > 0) {
-    return [seq[0]!, ...pre, ...seq.slice(1)];
+  if (preambleEntries.length > 0 && sequenceEntries.length > 0) {
+    return [sequenceEntries[0]!, ...preambleEntries, ...sequenceEntries.slice(1)];
   }
-  return pre.length > 0 ? [...pre, ...seq] : seq;
+  return preambleEntries.length > 0 ? [...preambleEntries, ...sequenceEntries] : sequenceEntries;
 }
 
 /** Legacy import: infer part-of-lap flags from preamble + sequence storage. */
