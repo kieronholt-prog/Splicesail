@@ -81,13 +81,16 @@ export type CourseMarkOverride = {
   mark_kind?: string; // present for virtual marks not in the global catalogue
 };
 
+/** Legacy 2-tuple or current 3-tuple with part-of-lap flag. */
+export type CourseMarkSequenceRow = [string, "P" | "S"] | [string, "P" | "S", boolean];
+
 export type SailingCourseRow = {
   id: string;
   group_id: string;
   course_letter: string;
   display_name: string;
   course_type: "SC" | "MC" | "LC" | "custom";
-  mark_sequence: [string, "P" | "S"][];
+  mark_sequence: CourseMarkSequenceRow[];
   marks_preamble: [string, "P" | "S"][];
   cross_sf_each_lap: boolean;
   sort_order: number;

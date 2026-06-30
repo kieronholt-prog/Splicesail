@@ -1,8 +1,8 @@
-import { isLineMark, type SailingCourseRow } from "./types";
+import { isLineMark, type CourseMarkSequenceRow, type SailingCourseRow } from "./types";
 
 export type MarkEntry = { name: string; tack: "P" | "S"; partOfLap: boolean };
 
-export type StoredMarkRow = [string, "P" | "S"] | [string, "P" | "S", boolean];
+export type StoredMarkRow = CourseMarkSequenceRow;
 
 function isStoredMarkRowWithLapFlag(row: unknown): row is [string, "P" | "S", boolean] {
   return Array.isArray(row) && row.length >= 3 && typeof row[2] === "boolean";
@@ -84,7 +84,10 @@ export function courseToEntries(
   return legacyCourseToEntries(c, markKindByName);
 }
 
-export function entriesToPayload(entries: MarkEntry[]) {
+export function entriesToPayload(entries: MarkEntry[]): {
+  marks_preamble: [string, "P" | "S"][];
+  mark_sequence: [string, "P" | "S", boolean][];
+} {
   return {
     marks_preamble: [] as [string, "P" | "S"][],
     mark_sequence: entries.map(
