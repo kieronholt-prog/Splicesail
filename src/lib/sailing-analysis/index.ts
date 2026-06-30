@@ -37,6 +37,7 @@ export * from "./course-resolve";
 export * from "./course-wind-baseline";
 export * from "./geo-heading";
 export * from "./manoeuvre-wind-crossing";
+export * from "./course-rounding-sequence";
 export * from "./wsc-seed";
 
 export type { AnalysisRunInput } from "./run-analysis-wrapper";

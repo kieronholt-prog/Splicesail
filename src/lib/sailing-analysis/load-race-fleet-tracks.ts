@@ -156,27 +156,48 @@ export async function loadRaceFleetTracks(
   return out;
 }
 
+export type FleetCollatedCounts = { pending: number; ready: number };
+
+/** Collated submission counts per race_fleet_id (null key = unassigned). */
+export async function countCollatedByFleet(
+  supabase: SupabaseClient,
+  raceId: string,
+): Promise<Map<string | null, FleetCollatedCounts>> {
+  const { data: subs, error } = await supabase
+    .from("race_track_submissions")
+    .select("id, race_entry_id, user_id, boat_id, race_id, status")
+    .eq("race_id", raceId)
+    .eq("analysis_mode", "collated")
+    .in("status", ["pending_ro", "ready"]);
+
+  if (error) {
+    console.error("countCollatedByFleet:", error.message);
+    return new Map();
+  }
+
+  const counts = new Map<string | null, FleetCollatedCounts>();
+  for (const sub of subs ?? []) {
+    const fleetId = await resolveSubmissionRaceFleetId(supabase, { ...sub, race_id: raceId });
+    const prev = counts.get(fleetId) ?? { pending: 0, ready: 0 };
+    if (sub.status === "ready") {
+      prev.ready += 1;
+    } else {
+      prev.pending += 1;
+    }
+    counts.set(fleetId, prev);
+  }
+  return counts;
+}
+
 /** Pending collated submission counts per race_fleet_id (null key = unassigned). */
 export async function countPendingCollatedByFleet(
   supabase: SupabaseClient,
   raceId: string,
 ): Promise<Map<string | null, number>> {
-  const { data: subs, error } = await supabase
-    .from("race_track_submissions")
-    .select("id, race_entry_id, user_id, boat_id, race_id")
-    .eq("race_id", raceId)
-    .eq("analysis_mode", "collated")
-    .eq("status", "pending_ro");
-
-  if (error) {
-    console.error("countPendingCollatedByFleet:", error.message);
-    return new Map();
+  const byFleet = await countCollatedByFleet(supabase, raceId);
+  const pending = new Map<string | null, number>();
+  for (const [fleetId, c] of byFleet) {
+    if (c.pending > 0) pending.set(fleetId, c.pending);
   }
-
-  const counts = new Map<string | null, number>();
-  for (const sub of subs ?? []) {
-    const fleetId = await resolveSubmissionRaceFleetId(supabase, { ...sub, race_id: raceId });
-    counts.set(fleetId, (counts.get(fleetId) ?? 0) + 1);
-  }
-  return counts;
+  return pending;
 }

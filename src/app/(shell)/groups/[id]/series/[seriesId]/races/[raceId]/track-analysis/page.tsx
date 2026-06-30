@@ -4,7 +4,7 @@ import { RoTrackAnalysisSetupFormClient } from "@/components/sailing-analysis/ro
 import { fleetStartLabel } from "@/lib/ro-fleet-start-label";
 import { getServerAuth } from "@/lib/supabase/auth-cache";
 import {
-  countPendingCollatedByFleet,
+  countCollatedByFleet,
 } from "@/lib/sailing-analysis/load-race-fleet-tracks";
 import {
   ensureFleetAnalysisSettingsRow,
@@ -75,7 +75,7 @@ export default async function RoTrackAnalysisPage({ params, searchParams }: Prop
     { data: courses, error: coursesError },
     { data: clubMarks, error: marksError },
     fleetLoad,
-    pendingByFleet,
+    collatedByFleet,
     settingsLoad,
   ] = await Promise.all([
     supabase
@@ -86,7 +86,7 @@ export default async function RoTrackAnalysisPage({ params, searchParams }: Prop
     supabase.from("group_sailing_courses").select("*").eq("group_id", groupId).order("sort_order"),
     supabase.from("group_sailing_marks").select("*").eq("group_id", groupId).order("sort_order"),
     loadOrSeedRaceFleetsForTrackAnalysis(supabase, { raceId, seriesId, groupId }),
-    countPendingCollatedByFleet(supabase, raceId),
+    countCollatedByFleet(supabase, raceId),
     supabase.from("race_fleet_analysis_settings").select("id").eq("race_id", raceId).limit(1),
   ]);
 
@@ -111,8 +111,8 @@ export default async function RoTrackAnalysisPage({ params, searchParams }: Prop
     q.fleet && raceFleets.some((f) => f.id === q.fleet) ? q.fleet : (raceFleets[0]?.id ?? null);
 
   const settingsByFleetId: Record<string, RaceFleetAnalysisSettingsRow | null> = {};
+  const collatedCountsByFleetId: Record<string, { pending: number; ready: number }> = {};
   const fleetTracksByFleetId: Record<string, []> = {};
-  const pendingByFleetId: Record<string, number> = {};
   const raceStartByFleetId: Record<string, { unixSec: number | null; sec: number }> = {};
 
   if (!settingsTableMissing) {
@@ -132,7 +132,7 @@ export default async function RoTrackAnalysisPage({ params, searchParams }: Prop
     raceFleets.map(async (f) => {
       settingsByFleetId[f.id] = settingsMap.get(f.id) ?? null;
       fleetTracksByFleetId[f.id] = [];
-      pendingByFleetId[f.id] = pendingByFleet.get(f.id) ?? 0;
+      collatedCountsByFleetId[f.id] = collatedByFleet.get(f.id) ?? { pending: 0, ready: 0 };
 
       const fleetStartUtcMs = await resolveFleetStartUtcMs(supabase, raceId, f.id);
       raceStartByFleetId[f.id] = {
@@ -142,7 +142,8 @@ export default async function RoTrackAnalysisPage({ params, searchParams }: Prop
     }),
   );
 
-  const unassignedPending = pendingByFleet.get(null) ?? 0;
+  const unassignedCounts = collatedByFleet.get(null) ?? { pending: 0, ready: 0 };
+  const unassignedPending = unassignedCounts.pending;
   const courseRows = courses ?? [];
   const seriesRel = seriesRow?.series;
   const seriesOpenHours =
@@ -158,7 +159,7 @@ export default async function RoTrackAnalysisPage({ params, searchParams }: Prop
     fleetsError?.message ??
     null;
   const isClubAdmin = me?.role === "club_admin";
-  const totalPending = [...pendingByFleet.values()].reduce((a, b) => a + b, 0);
+  const totalPending = [...collatedByFleet.values()].reduce((a, c) => a + c.pending, 0);
 
   const nav = buildRoRaceLineNav({ groupId, seriesId, raceId, current: "track-analysis" });
 
@@ -306,7 +307,7 @@ export default async function RoTrackAnalysisPage({ params, searchParams }: Prop
             raceFleets={raceFleets}
             settingsByFleetId={settingsByFleetId}
             fleetTracksByFleetId={fleetTracksByFleetId}
-            pendingByFleetId={pendingByFleetId}
+            collatedCountsByFleetId={collatedCountsByFleetId}
             raceStartByFleetId={raceStartByFleetId}
             initialFleetId={initialFleetId ?? undefined}
           />

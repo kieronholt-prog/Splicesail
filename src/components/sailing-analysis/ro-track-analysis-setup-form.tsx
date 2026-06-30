@@ -10,7 +10,7 @@ import {
   loadRaceFleetTracksAction,
 } from "@/app/actions/race-track-analysis";
 import type { SailingCourseRow, SailingMarkRow } from "@/lib/sailing-analysis/types";
-import type { FleetTrackOverlay } from "@/lib/sailing-analysis/load-race-fleet-tracks";
+import type { FleetCollatedCounts, FleetTrackOverlay } from "@/lib/sailing-analysis/load-race-fleet-tracks";
 import type { RaceFleetAnalysisSettingsRow } from "@/lib/sailing-analysis/race-fleet-analysis-settings";
 
 export function RoTrackAnalysisSetupForm({
@@ -22,7 +22,7 @@ export function RoTrackAnalysisSetupForm({
   raceFleets,
   settingsByFleetId,
   fleetTracksByFleetId: initialFleetTracksByFleetId,
-  pendingByFleetId,
+  collatedCountsByFleetId,
   raceStartByFleetId,
   initialFleetId,
 }: {
@@ -34,7 +34,7 @@ export function RoTrackAnalysisSetupForm({
   raceFleets: RaceFleetVm[];
   settingsByFleetId: Record<string, RaceFleetAnalysisSettingsRow | null>;
   fleetTracksByFleetId: Record<string, FleetTrackOverlay[]>;
-  pendingByFleetId: Record<string, number>;
+  collatedCountsByFleetId: Record<string, FleetCollatedCounts>;
   raceStartByFleetId: Record<string, { unixSec: number | null; sec: number }>;
   initialFleetId?: string;
 }) {
@@ -71,22 +71,22 @@ export function RoTrackAnalysisSetupForm({
   const selectedFleet = raceFleets.find((f) => f.id === selectedFleetId) ?? null;
 
   const totalPending = useMemo(
-    () => Object.values(pendingByFleetId).reduce((a, b) => a + b, 0),
-    [pendingByFleetId],
+    () => Object.values(collatedCountsByFleetId).reduce((a, c) => a + c.pending, 0),
+    [collatedCountsByFleetId],
   );
 
   const fleetsReadyForBulk = useMemo(() => {
     return raceFleets.filter((f) => {
-      const pending = pendingByFleetId[f.id] ?? 0;
+      const pending = collatedCountsByFleetId[f.id]?.pending ?? 0;
       if (pending === 0) return true;
       return Boolean(settingsByFleetId[f.id]?.course_letter);
     });
-  }, [raceFleets, pendingByFleetId, settingsByFleetId]);
+  }, [raceFleets, collatedCountsByFleetId, settingsByFleetId]);
 
   const canAnalyseAll =
     totalPending > 0 &&
     raceFleets.every((f) => {
-      const pending = pendingByFleetId[f.id] ?? 0;
+      const pending = collatedCountsByFleetId[f.id]?.pending ?? 0;
       return pending === 0 || settingsByFleetId[f.id]?.course_letter;
     });
 
@@ -118,8 +118,17 @@ export function RoTrackAnalysisSetupForm({
 
       <div className="flex flex-wrap gap-2">
         {raceFleets.map((f) => {
-          const pending = pendingByFleetId[f.id] ?? 0;
+          const counts = collatedCountsByFleetId[f.id] ?? { pending: 0, ready: 0 };
+          const total = counts.pending + counts.ready;
           const saved = Boolean(settingsByFleetId[f.id]?.course_letter);
+          const pillDetail =
+            total > 0
+              ? counts.pending > 0 && counts.ready > 0
+                ? ` (${total}: ${counts.pending} pending)`
+                : counts.pending > 0
+                  ? ` (${counts.pending} pending)`
+                  : ` (${total})`
+              : "";
           return (
             <button
               key={f.id}
@@ -128,7 +137,7 @@ export function RoTrackAnalysisSetupForm({
               className={`${pillBase} ${selectedFleetId === f.id ? pillActive : pillInactive}`}
             >
               {f.name}
-              {pending > 0 ? ` (${pending})` : ""}
+              {pillDetail}
               {saved ? " ✓" : ""}
             </button>
           );
@@ -151,7 +160,7 @@ export function RoTrackAnalysisSetupForm({
           raceStartUnixSec={start?.unixSec ?? null}
           raceStartSec={start?.sec ?? 0}
           savedSettings={settingsByFleetId[selectedFleetId] ?? null}
-          pendingCount={pendingByFleetId[selectedFleetId] ?? 0}
+          collatedCounts={collatedCountsByFleetId[selectedFleetId] ?? { pending: 0, ready: 0 }}
         />
         )
       ) : null}

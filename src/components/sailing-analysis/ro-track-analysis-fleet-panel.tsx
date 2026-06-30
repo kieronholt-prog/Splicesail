@@ -22,9 +22,10 @@ import {
 } from "@/app/actions/race-track-analysis";
 import { DETECTION_DEFAULTS } from "@/lib/sailing-analysis";
 import type { MarkOverride, SailingCourseRow, SailingMarkRow } from "@/lib/sailing-analysis/types";
+import { CourseRoundingSequenceSummary } from "@/components/sailing-analysis/course-rounding-sequence-summary";
 import { markNamesForCourse } from "@/lib/sailing-analysis/course-mark-names";
 import type { StartFinishLineEnds } from "@/lib/sailing-analysis/analysis-types";
-import type { FleetTrackOverlay } from "@/lib/sailing-analysis/load-race-fleet-tracks";
+import type { FleetCollatedCounts, FleetTrackOverlay } from "@/lib/sailing-analysis/load-race-fleet-tracks";
 import type { RaceFleetAnalysisSettingsRow } from "@/lib/sailing-analysis/race-fleet-analysis-settings";
 
 export type RaceFleetVm = {
@@ -44,7 +45,7 @@ export function RoTrackAnalysisFleetPanel({
   raceStartUnixSec,
   raceStartSec,
   savedSettings,
-  pendingCount,
+  collatedCounts,
 }: {
   fleet: RaceFleetVm;
   groupId: string;
@@ -56,8 +57,12 @@ export function RoTrackAnalysisFleetPanel({
   raceStartUnixSec: number | null;
   raceStartSec: number;
   savedSettings: RaceFleetAnalysisSettingsRow | null;
-  pendingCount: number;
+  collatedCounts: FleetCollatedCounts;
 }) {
+  const pendingCount = collatedCounts.pending;
+  const readyCount = collatedCounts.ready;
+  const totalCollated = pendingCount + readyCount;
+  const tracksOnMap = fleetTracks.length;
   const [courseLetter, setCourseLetter] = useState(() =>
     defaultCourseLetterValue(savedSettings?.course_letter, courses),
   );
@@ -108,13 +113,38 @@ export function RoTrackAnalysisFleetPanel({
         </p>
       ) : null}
 
-      {pendingCount > 0 ? (
+      {totalCollated > 0 || tracksOnMap > 0 ? (
         <p className="rounded-lg border border-splice-sky/60 bg-splice-sky/10 px-3 py-2 text-sm text-splice-navy dark:text-splice-foam">
-          {pendingCount} collated track{pendingCount !== 1 ? "s" : ""} awaiting analysis in this fleet.
+          {tracksOnMap > 0 ? (
+            <>
+              <strong>{tracksOnMap}</strong> collated track{tracksOnMap !== 1 ? "s" : ""} on map
+            </>
+          ) : (
+            <>
+              <strong>{totalCollated}</strong> collated track{totalCollated !== 1 ? "s" : ""} in this fleet
+            </>
+          )}
+          {pendingCount > 0 ? (
+            <>
+              {" "}
+              · <strong>{pendingCount}</strong> awaiting analysis
+            </>
+          ) : null}
+          {readyCount > 0 ? (
+            <>
+              {" "}
+              · <strong>{readyCount}</strong> already analysed
+            </>
+          ) : null}
+          {tracksOnMap > 0 && tracksOnMap < totalCollated ? (
+            <span className="mt-1 block text-xs opacity-90">
+              Some tracks have no GPS on the map yet — sailors may need to re-open their upload to cache points.
+            </span>
+          ) : null}
         </p>
       ) : (
         <p className="text-sm text-splice-ocean dark:text-splice-water">
-          No pending tracks in this fleet. Adjust marks here if you need to re-run analysis later.
+          No collated tracks in this fleet yet. Set course and laps below before uploads arrive.
         </p>
       )}
 
@@ -140,6 +170,14 @@ export function RoTrackAnalysisFleetPanel({
           showRaceStartField={false}
           windwardInline
         />
+
+        {courseLetter ? (
+          <CourseRoundingSequenceSummary
+            course={selectedCourse}
+            laps={laps}
+            clubMarks={clubMarks}
+          />
+        ) : null}
 
         <label className="flex min-w-0 max-w-xs flex-col gap-1">
           <span className={spliceFieldLabelClass}>Wind direction (optional)</span>
