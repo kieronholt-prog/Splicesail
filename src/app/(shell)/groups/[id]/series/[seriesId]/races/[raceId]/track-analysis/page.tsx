@@ -11,6 +11,7 @@ import {
   loadRaceFleetAnalysisSettingsMap,
   type RaceFleetAnalysisSettingsRow,
 } from "@/lib/sailing-analysis/race-fleet-analysis-settings";
+import { formatClubDdMmmYyyyHmFromIso } from "@/lib/club-display-format";
 import {
   describeTrackRaceMatchWindow,
   TRACK_RACE_MATCH_DEFAULT_OPEN_HOURS,
@@ -180,7 +181,9 @@ export default async function RoTrackAnalysisPage({ params, searchParams }: Prop
 
         <p className="mt-6 text-sm text-splice-ocean dark:text-splice-water">
           {race.name}
-          {race.scheduled_at ? ` · ${new Date(race.scheduled_at).toLocaleString()}` : ""}
+          {race.scheduled_at
+            ? ` · ${formatClubDdMmmYyyyHmFromIso(race.scheduled_at, clubTz)}`
+            : ""}
           {" · "}
           <Link
             href={`/groups/${groupId}/series/${seriesId}/races/${raceId}/track-compare`}

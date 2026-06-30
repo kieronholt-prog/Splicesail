@@ -7,6 +7,7 @@ import {
   renameTrackSubmissionAction,
 } from "@/app/actions/track-submissions";
 import { spliceFieldClass } from "@/components/sailing-analysis/form-field-classes";
+import { formatClubDdMmmYyyyHmsFromIso } from "@/lib/club-display-format";
 import type { SubmissionStatus } from "@/lib/sailing-analysis/types";
 
 export type TrackSubmissionRow = {
@@ -99,7 +100,8 @@ function TrackSubmissionListItem({ row }: { row: TrackSubmissionRow }) {
               {row.activity_name ?? "Untitled track"}
             </p>
             <p className="mt-0.5 text-xs text-splice-ocean dark:text-splice-water">
-              {new Date(row.activity_started_at).toLocaleString()} · {statusLabel(row.status)}
+              {formatClubDdMmmYyyyHmsFromIso(row.activity_started_at, "Europe/London")} ·{" "}
+              {statusLabel(row.status)}
             </p>
             <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
               <button

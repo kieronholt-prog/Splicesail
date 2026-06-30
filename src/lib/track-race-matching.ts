@@ -1,5 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { formatClubDdMmmHmFromIso } from "@/lib/club-display-format";
+import { isPlausibleRaceInstantMs } from "@/lib/plausible-race-instant";
+import {
+  fleetStartSignalUtcMs,
+  primaryRaceFleet,
+  type FleetStartSignalRow,
+} from "@/lib/resolve-fleet-start-signal";
 
 /** Latest time after `races.scheduled_at` that still overlaps a GPS track (4 hours). */
 export const TRACK_RACE_MATCH_MAX_DURATION_MS = 4 * 60 * 60 * 1000;
@@ -35,6 +41,7 @@ type RaceRow = {
   name: string;
   scheduled_at: string;
   series_id: string;
+  race_fleets?: FleetStartSignalRow[] | null;
   series: {
     id: string;
     name: string;
@@ -43,6 +50,23 @@ type RaceRow = {
     groups: { id: string; name: string; iana_timezone?: string | null } | { id: string; name: string; iana_timezone?: string | null }[] | null;
   } | null;
 };
+
+/** Match window anchor: RO-amended primary fleet signal when set, else schedule. */
+export function effectiveRaceStartMsForMatching(race: Pick<RaceRow, "scheduled_at" | "race_fleets">): number | null {
+  const fleets = race.race_fleets ?? [];
+  const primary = primaryRaceFleet(fleets);
+  const fromPrimary = fleetStartSignalUtcMs(race.scheduled_at, primary);
+  if (fromPrimary != null && isPlausibleRaceInstantMs(fromPrimary)) return fromPrimary;
+
+  const scheduledMs = new Date(race.scheduled_at).getTime();
+  if (isPlausibleRaceInstantMs(scheduledMs)) return scheduledMs;
+
+  for (const fleet of fleets) {
+    const ms = fleetStartSignalUtcMs(race.scheduled_at, fleet);
+    if (ms != null && isPlausibleRaceInstantMs(ms)) return ms;
+  }
+  return null;
+}
 
 function unwrapOne<T>(rel: T | T[] | null | undefined): T | null {
   if (rel == null) return null;
@@ -78,15 +102,15 @@ export function rankRaceCandidates(
     const group = unwrapOne(series.groups);
     if (!group) continue;
 
-    const scheduledMs = new Date(race.scheduled_at).getTime();
-    if (!Number.isFinite(scheduledMs)) continue;
+    const raceStartMs = effectiveRaceStartMsForMatching(race);
+    if (raceStartMs == null) continue;
 
     const openHours = series.tally_open_hours_before_fleet_start ?? 2;
     const windowBeforeMs = openHours * 60 * 60 * 1000;
     const overlap = overlapMs(
       trackStartMs,
       trackEndMs,
-      scheduledMs,
+      raceStartMs,
       windowBeforeMs,
       DEFAULT_MAX_RACE_DURATION_MS,
     );
@@ -94,6 +118,8 @@ export function rankRaceCandidates(
 
     const hasEntry = entryRaceIds.has(race.id);
     const score = overlap + (hasEntry ? 1_000_000_000 : 0);
+    const clubTz = group.iana_timezone?.trim() || DEFAULT_CLUB_TIMEZONE;
+    const raceStartIso = new Date(raceStartMs).toISOString();
 
     out.push({
       raceId: race.id,
@@ -102,11 +128,8 @@ export function rankRaceCandidates(
       groupName: group.name,
       seriesName: series.name,
       raceName: race.name,
-      scheduledAt: race.scheduled_at,
-      scheduledAtLabel: formatClubDdMmmHmFromIso(
-        race.scheduled_at,
-        group.iana_timezone?.trim() || DEFAULT_CLUB_TIMEZONE,
-      ),
+      scheduledAt: raceStartIso,
+      scheduledAtLabel: formatClubDdMmmHmFromIso(raceStartIso, clubTz),
       score,
       hasEntry,
       boats: boatsBySeriesId.get(series.id) ?? [],
@@ -138,13 +161,15 @@ export async function loadRaceMatchCandidates(
   const seriesIds = (seriesRows ?? []).map((s) => s.id);
   if (seriesIds.length === 0) return [];
 
-  const searchStart = new Date(trackStartMs - DEFAULT_MAX_RACE_DURATION_MS).toISOString();
-  const searchEnd = new Date(trackEndMs + DEFAULT_MAX_RACE_DURATION_MS).toISOString();
+  // Extra day each side so races with stale scheduled_at but valid fleet start_signal_at still load.
+  const searchPaddingMs = 24 * 60 * 60 * 1000;
+  const searchStart = new Date(trackStartMs - DEFAULT_MAX_RACE_DURATION_MS - searchPaddingMs).toISOString();
+  const searchEnd = new Date(trackEndMs + DEFAULT_MAX_RACE_DURATION_MS + searchPaddingMs).toISOString();
 
   const { data: racesRaw } = await supabase
     .from("races")
     .select(
-      "id, name, scheduled_at, series_id, series:series_id(id, name, group_id, tally_open_hours_before_fleet_start, groups:group_id(id, name, iana_timezone))",
+      "id, name, scheduled_at, series_id, race_fleets(id, start_signal_at, start_offset_minutes, sort_order), series:series_id(id, name, group_id, tally_open_hours_before_fleet_start, groups:group_id(id, name, iana_timezone))",
     )
     .in("series_id", seriesIds)
     .gte("scheduled_at", searchStart)
