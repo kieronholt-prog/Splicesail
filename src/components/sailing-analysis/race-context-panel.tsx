@@ -116,7 +116,7 @@ export function RaceContextPanel({ context, groupId, seriesId, trackCompareHref 
             <div className="flex flex-wrap gap-2 pt-1">
               {context.track.status === "ready" ? (
                 <Link
-                  href={context.track.analysisUrl.replace(/^https?:\/\/[^/]+/, "")}
+                  href={`/tracks/${context.track.submissionId}/analysis`}
                   className="rounded-lg bg-splice-navy px-3 py-1.5 text-sm font-medium text-white dark:bg-splice-foam dark:text-splice-navy"
                 >
                   View full analysis

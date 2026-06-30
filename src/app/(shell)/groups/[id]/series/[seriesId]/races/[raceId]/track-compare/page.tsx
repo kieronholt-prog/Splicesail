@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { loadFleetComparePairAction } from "@/app/actions/fleet-compare";
 import { FleetCompareClient } from "@/components/sailing-analysis/fleet-compare-client";
-import { loadComparePair, loadMobileFleetAnalyses } from "@/lib/mobile/fleet-analyses";
+import { loadMobileFleetAnalyses } from "@/lib/mobile/fleet-analyses";
 import { getServerAuth } from "@/lib/supabase/auth-cache";
 
 type Props = {
@@ -20,13 +21,6 @@ export default async function TrackComparePage({ params, searchParams }: Props) 
   const fleet = await loadMobileFleetAnalyses(supabase, user.id, raceId, {
     raceEntryId: raceEntryId ?? undefined,
   });
-
-  async function loadPairAction(leftId: string, rightId: string) {
-    "use server";
-    const { supabase: sb, user: u } = await getServerAuth();
-    if (!u) return null;
-    return loadComparePair(sb, u.id, leftId, rightId);
-  }
 
   return (
     <div className="flex flex-1 flex-col bg-splice-surface px-4 py-12 dark:bg-splice-navy">
@@ -50,7 +44,7 @@ export default async function TrackComparePage({ params, searchParams }: Props) 
           mySubmissionId={fleet.mySubmissionId}
           initialLeftId={q.a?.trim() || fleet.mySubmissionId}
           initialRightId={q.b?.trim() || null}
-          loadPairAction={loadPairAction}
+          loadPairAction={loadFleetComparePairAction}
         />
       </main>
     </div>

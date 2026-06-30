@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import {
   compareAnalyses,
   formatTackSpeed,
@@ -59,8 +59,8 @@ function TackSection({
           </thead>
           <tbody className="text-splice-navy dark:text-splice-foam">
             {(["port", "stbd"] as const).map((side) => (
-              <>
-                <tr key={`${side}-h`} className="bg-splice-surface/80 dark:bg-splice-navy/60">
+              <Fragment key={side}>
+                <tr className="bg-splice-surface/80 dark:bg-splice-navy/60">
                   <td colSpan={3} className="py-1.5 pl-1 text-xs font-semibold uppercase">
                     {side === "port" ? "Port tack" : "Starboard tack"}
                   </td>
@@ -87,12 +87,12 @@ function TackSection({
                       : "—"}
                   </td>
                 </tr>
-                <tr key={`${side}-twa`} className="border-b border-splice-sky/50 dark:border-splice-navy-light/50">
+                <tr className="border-b border-splice-sky/50 dark:border-splice-navy-light/50">
                   <td className="py-2 pr-2">Mean TWA</td>
                   <td className="py-2 pr-2 text-right font-mono">{formatTwa(leftSection[side])}</td>
                   <td className="py-2 text-right font-mono">{formatTwa(rightSection[side])}</td>
                 </tr>
-              </>
+              </Fragment>
             ))}
           </tbody>
         </table>
