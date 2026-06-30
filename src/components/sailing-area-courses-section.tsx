@@ -229,6 +229,10 @@ export function CourseDetailPanel({
   }, [course, markKindByName, editing]);
 
   const [crossSfEachLap, setCrossSfEachLap] = useState(course.cross_sf_each_lap ?? false);
+  const [addMarkName, setAddMarkName] = useState("");
+  const [addTack, setAddTack] = useState<"P" | "S">("S");
+  const [addLocalName, setAddLocalName] = useState("");
+  const [addLocalKind, setAddLocalKind] = useState<"laid" | "start_line" | "finish_line" | "start_finish">("laid");
 
   // Global marks + any virtual marks already defined in overrides for this course.
   const availableNames = useMemo(() => {
