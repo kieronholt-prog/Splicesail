@@ -8,18 +8,14 @@ function isStoredMarkRowWithLapFlag(row: unknown): row is [string, "P" | "S", bo
   return Array.isArray(row) && row.length >= 3 && typeof row[2] === "boolean";
 }
 
-function tackFromRow(t: unknown): "P" | "S" {
-  return t === "P" ? "P" : "S";
-}
-
 /** Ordered marks for course builder / analysis (display order). */
 export function courseToDisplayEntries(c: SailingCourseRow): MarkEntry[] {
-  const seqRaw = (c.mark_sequence ?? []) as unknown[];
-  if (seqRaw.length > 0 && isStoredMarkRowWithLapFlag(seqRaw[0])) {
-    return seqRaw.map((row) => ({
-      name: String(row[0]),
-      tack: tackFromRow(row[1]),
-      partOfLap: Boolean(row[2]),
+  const seq = c.mark_sequence ?? [];
+  if (seq.length > 0 && isStoredMarkRowWithLapFlag(seq[0])) {
+    return (seq as [string, "P" | "S", boolean][]).map(([name, tack, partOfLap]) => ({
+      name,
+      tack,
+      partOfLap,
     }));
   }
 
@@ -77,8 +73,8 @@ export function courseToEntries(
   c: SailingCourseRow,
   markKindByName?: Map<string, string>,
 ): MarkEntry[] {
-  const seqRaw = (c.mark_sequence ?? []) as unknown[];
-  if (seqRaw.length > 0 && isStoredMarkRowWithLapFlag(seqRaw[0])) {
+  const seq = c.mark_sequence ?? [];
+  if (seq.length > 0 && isStoredMarkRowWithLapFlag(seq[0])) {
     return courseToDisplayEntries(c);
   }
   return legacyCourseToEntries(c, markKindByName);
