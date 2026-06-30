@@ -6,6 +6,8 @@ type SubmissionRow = {
   analysis_mode: string | null;
   race_id: string | null;
   race_entry_id?: string | null;
+  user_id?: string | null;
+  boat_id?: string | null;
   course_letter: string | null;
   laps: number | null;
   mark_overrides: unknown;

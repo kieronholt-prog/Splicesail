@@ -20,7 +20,7 @@ import {
   DETECTION_DEFAULTS,
 } from "@/lib/sailing-analysis";
 import type { AnalysisMode, MarkOverride } from "@/lib/sailing-analysis/types";
-import { ensureFleetAnalysisSettingsRow } from "@/lib/sailing-analysis/race-fleet-analysis-settings";
+import { ensureFleetAnalysisSettingsRow, ensureRaceEntryForTrackSubmission } from "@/lib/sailing-analysis/race-fleet-analysis-settings";
 
 function redirectTracks(submissionId: string, query?: string) {
   redirect(`/tracks/${submissionId}${query ? `?${query}` : ""}`);
@@ -235,13 +235,20 @@ export async function confirmRaceBoatAction(formData: FormData) {
     );
   }
 
-  const { data: entry } = await supabase
-    .from("race_entries")
-    .select("id")
-    .eq("race_id", raceId)
-    .eq("user_id", sub.user_id)
-    .eq("boat_id", boatId)
-    .maybeSingle();
+  let raceEntryId: string | null = null;
+  try {
+    const ensured = await ensureRaceEntryForTrackSubmission(supabase, {
+      raceId,
+      userId: sub.user_id,
+      boatId,
+      seriesId,
+      groupId,
+    });
+    raceEntryId = ensured.raceEntryId;
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Could not link race entry.";
+    redirectTracks(submissionId, "error=" + encodeURIComponent(message));
+  }
 
   await supabase
     .from("race_track_submissions")
@@ -249,7 +256,7 @@ export async function confirmRaceBoatAction(formData: FormData) {
       race_id: raceId,
       boat_id: boatId,
       group_id: groupId,
-      race_entry_id: entry?.id ?? null,
+      race_entry_id: raceEntryId,
       status: "pending_mode",
       updated_at: new Date().toISOString(),
     })
@@ -302,18 +309,49 @@ export async function setAnalysisModeAction(formData: FormData) {
       );
     }
 
-    const { data: entry } = sub.race_entry_id
-      ? await supabase
-          .from("race_entries")
-          .select("fleet_id")
-          .eq("id", sub.race_entry_id)
-          .maybeSingle()
-      : { data: null };
+    let raceFleetId: string | null = null;
+    if (sub.race_entry_id) {
+      const { data: entry } = await supabase
+        .from("race_entries")
+        .select("fleet_id")
+        .eq("id", sub.race_entry_id)
+        .maybeSingle();
+      raceFleetId = entry?.fleet_id ?? null;
+    }
 
-    if (entry?.fleet_id && sub.race_id) {
+    if (!raceFleetId && sub.race_id && sub.boat_id) {
+      const { data: race } = await supabase
+        .from("races")
+        .select("series_id")
+        .eq("id", sub.race_id)
+        .maybeSingle();
+
+      if (race?.series_id) {
+        try {
+          const ensured = await ensureRaceEntryForTrackSubmission(supabase, {
+            raceId: sub.race_id,
+            userId: user.id,
+            boatId: sub.boat_id,
+            seriesId: race.series_id,
+            groupId: sub.group_id,
+          });
+          raceFleetId = ensured.fleetId;
+          if (!sub.race_entry_id) {
+            await supabase
+              .from("race_track_submissions")
+              .update({ race_entry_id: ensured.raceEntryId, updated_at: new Date().toISOString() })
+              .eq("id", submissionId);
+          }
+        } catch {
+          /* fleet may still resolve at analysis time via boat rules */
+        }
+      }
+    }
+
+    if (raceFleetId && sub.race_id) {
       await ensureFleetAnalysisSettingsRow(supabase, {
         raceId: sub.race_id,
-        raceFleetId: entry.fleet_id,
+        raceFleetId,
         groupId: sub.group_id,
       });
     }

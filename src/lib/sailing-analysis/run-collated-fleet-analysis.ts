@@ -18,6 +18,7 @@ type SubmissionRow = {
   user_id: string;
   race_id: string | null;
   race_entry_id: string | null;
+  boat_id?: string | null;
   track_source: string;
   external_activity_id: string;
   storage_path: string | null;

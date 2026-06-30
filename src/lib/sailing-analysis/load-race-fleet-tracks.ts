@@ -163,7 +163,7 @@ export async function countPendingCollatedByFleet(
 ): Promise<Map<string | null, number>> {
   const { data: subs, error } = await supabase
     .from("race_track_submissions")
-    .select("id, race_entry_id")
+    .select("id, race_entry_id, user_id, boat_id, race_id")
     .eq("race_id", raceId)
     .eq("analysis_mode", "collated")
     .eq("status", "pending_ro");

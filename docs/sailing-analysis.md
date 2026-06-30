@@ -35,7 +35,7 @@ pending_confirm → pending_mode → pending_setup → ready   (standalone)
                               → pending_ro → ready       (collated)
 ```
 
-Collated mode requires `profiles.share_track_for_enhanced_analytics` and at least one club course (non-custom). The RO confirms **course letter and laps per race fleet** on the track-analysis page (preset before uploads is supported); mark drag positions are stored in `race_fleet_analysis_settings.mark_overrides`. Submissions must be linked to a race entry with a `fleet_id` so settings resolve correctly.
+Collated mode requires `profiles.share_track_for_enhanced_analytics` and at least one club course (non-custom). The RO confirms **course letter and laps per race fleet** on the track-analysis page (preset before uploads is supported); mark drag positions are stored in `race_fleet_analysis_settings.mark_overrides`. Fleet assignment uses the tagged boat matched to `race_fleets` rules (class or PY), same as Manage — a series signup alone is enough once race fleets exist on the race.
 
 ### Automatic track → race matching
 

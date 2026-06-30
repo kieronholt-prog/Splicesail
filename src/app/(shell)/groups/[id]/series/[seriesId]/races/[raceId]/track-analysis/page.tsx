@@ -256,7 +256,8 @@ export default async function RoTrackAnalysisPage({ params, searchParams }: Prop
           {unassignedPending > 0 ? (
             <p className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
               {unassignedPending} collated track{unassignedPending !== 1 ? "s" : ""}{" "}
-              {unassignedPending !== 1 ? "are" : "is"} not linked to a fleet (check race entries on Manage).
+              {unassignedPending !== 1 ? "are" : "is"} not linked to a fleet — check the boat&apos;s class
+              matches a race fleet on Manage, or that race fleets exist for this race.
             </p>
           ) : null}
 

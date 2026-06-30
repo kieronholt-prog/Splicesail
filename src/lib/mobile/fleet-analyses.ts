@@ -102,6 +102,8 @@ export async function loadMobileFleetAnalyses(
       `
       id,
       user_id,
+      race_id,
+      boat_id,
       race_entry_id,
       activity_name,
       race_track_analyses ( stats, wind_direction ),
