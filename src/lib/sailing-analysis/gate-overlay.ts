@@ -1,5 +1,6 @@
-import { buildMarkGateDebugFC, DEFAULT_SF_LINE_ENDS } from "./engine-core";
-import { buildMarkPositionsFromClubData, startFinishLineFromSetup } from "./course-resolve";
+import { buildOneSidedGateFC, DEFAULT_SF_LINE_ENDS } from "./engine-core";
+import { buildResolvedCourseMarks, startFinishLineFromSetup } from "./course-resolve";
+import { expandResolvedCourseMarks } from "./course-wind-baseline";
 import type { MarkOverride, SailingCourseRow, SailingMarkRow } from "./types";
 import type { StartFinishLineEnds } from "./analysis-types";
 
@@ -27,13 +28,12 @@ export function buildGateOverlayFC(
   markOverrides: Record<string, MarkOverride> = {},
   courseSetup: Record<string, unknown> | null = null,
 ): GeoJSON.FeatureCollection {
-  const { markPositions, preamble } = buildMarkPositionsFromClubData(clubMarks, course, markOverrides);
+  const resolved = buildResolvedCourseMarks(clubMarks, course, markOverrides);
+  const fullSeq = expandResolvedCourseMarks(resolved, laps);
   const sf = sfLineFromCourseSetup(courseSetup);
-  return buildMarkGateDebugFC(
-    seqRows(preamble),
-    seqRows(markPositions),
-    laps,
-    sf,
+  return buildOneSidedGateFC(
+    seqRows(fullSeq),
     120,
+    sf,
   ) as GeoJSON.FeatureCollection;
 }

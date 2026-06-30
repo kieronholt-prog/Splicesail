@@ -201,7 +201,13 @@ function SailingAreaMap({
       }
 
       // Resolve all course entries against club marks + overrides
-      const entries = courseToEntries(course);
+      const markKindByName = new Map(
+        marks.map((m) => [m.name, m.mark_kind] as [string, string]),
+      );
+      for (const [name, ov] of Object.entries(courseOverrides)) {
+        if (ov.mark_kind) markKindByName.set(name, ov.mark_kind);
+      }
+      const entries = courseToEntries(course, markKindByName);
       const resolved = entries
         .map((e) => ({ ...e, mark: resolveMarkVm(e.name) }))
         .filter((e): e is typeof e & { mark: SailingMarkVm } => e.mark !== null);
@@ -280,7 +286,7 @@ function SailingAreaMap({
       // Laid marks and virtual (course-local) marks are draggable in edit mode.
       const roundingResolved = resolved.filter((e) => !isLineMark(e.mark.mark_kind));
       const seenRoundingNames = new Set<string>();
-      roundingResolved.forEach(({ name, tack, firstLapOnly, mark }) => {
+      roundingResolved.forEach(({ name, tack, partOfLap, mark }) => {
         // Only place one marker per unique name (same physical mark may appear multiple times).
         const alreadyPlaced = seenRoundingNames.has(name);
         seenRoundingNames.add(name);
@@ -294,9 +300,9 @@ function SailingAreaMap({
           `display:flex;align-items:center;justify-content:center;`,
           `font:700 9px ui-monospace,monospace;`,
           `box-shadow:0 0 0 2px #00000055;${dragCursor}`,
-          firstLapOnly ? "opacity:0.65;" : "",
+          partOfLap ? "" : "opacity:0.65;",
         ].join(""), lbl, name);
-        const popup = `${name} — ${tack === "P" ? "Port" : "Starboard"}${firstLapOnly ? " (1st lap)" : ""}`;
+        const popup = `${name} — ${tack === "P" ? "Port" : "Starboard"}${partOfLap ? "" : " (once per race)"}`;
         if (!alreadyPlaced) {
           const mk = new mapboxgl.Marker({ element: el, draggable: roundDraggable })
             .setLngLat([mark.lon, mark.lat])
@@ -325,7 +331,7 @@ function SailingAreaMap({
         lastResolved && isLineMark(lastResolved.mark.mark_kind) ? lastResolved.mark : null;
       const finishCoordInSequence: [number, number] | null = finishInSequence ? [lineCenter(finishInSequence).lon, lineCenter(finishInSequence).lat] : null;
 
-      const seqRounding = roundingResolved.filter((e) => !e.firstLapOnly);
+      const seqRounding = roundingResolved.filter((e) => e.partOfLap);
 
       // Route depends on whether the course ends with a start_finish (circuit)
       // or a separate finish_line:

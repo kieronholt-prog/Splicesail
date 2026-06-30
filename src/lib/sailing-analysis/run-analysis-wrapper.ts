@@ -8,6 +8,7 @@ import type { DetectionSettings } from "./types";
 import { buildWindTuningFromCourse } from "./course-wind-baseline";
 import {
   buildMarkPositionsFromClubData,
+  buildResolvedCourseMarks,
   startFinishLineFromSetup,
   type ResolvedMarkPosition,
 } from "./course-resolve";
@@ -50,6 +51,11 @@ export function executeAnalysis(input: AnalysisRunInput) {
     input.course,
     input.markOverrides ?? {},
   );
+  const resolvedMarks = buildResolvedCourseMarks(
+    input.marks,
+    input.course,
+    input.markOverrides ?? {},
+  );
 
   const sfLine = startFinishLineFromSetup(courseSetup, DEFAULT_SF_LINE_ENDS);
   const windward =
@@ -58,8 +64,7 @@ export function executeAnalysis(input: AnalysisRunInput) {
     null;
 
   const windTuning = buildWindTuningFromCourse(
-    preamble,
-    markPositions,
+    resolvedMarks,
     windward,
     input.laps ?? 1,
   );
@@ -76,6 +81,7 @@ export function executeAnalysis(input: AnalysisRunInput) {
     input.gpsToBowM ?? 2,
     windward as never,
     null,
+    resolvedMarks as never,
   );
 }
 

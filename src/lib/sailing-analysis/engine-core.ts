@@ -3,6 +3,8 @@
 /* Auto-extracted from Sailstats index.html */
 import { attachCourseDir, courseDirFromPoint, isUpwindHemisphere } from "./geo-heading";
 import { classifyManoeuvreByWindCrossing } from "./manoeuvre-wind-crossing";
+import { expandEntriesForLaps } from "./course-mark-entries";
+import { expandResolvedCourseMarks as expandResolvedCourseMarksForEngine } from "./course-wind-baseline";
 const DETECTION_DEFAULTS={
   tack:{minTurn:60,maxTurn:170,minSpeed:1.5,cooldownSec:4,beforePts:4,afterPts:5},
   gybe:{minTurn:45,maxTurn:230,minSpeed:1.8,cooldownSec:7,beforePts:6,afterPts:8},
@@ -2123,18 +2125,21 @@ function estWind(pts,windTuning=null){
   return out.windEst;
 }
 
-/** Full rounding order: optional preamble (once) then lap marks × laps (matches WSC Course Selector). */
-function expandCourseMarks(preamble,lapMarks,laps){
-  const fullSeq=[];
-  let seqIdx=0;
+/** Full rounding order: prefix once, lap block × laps, suffix once (e.g. finish line). */
+function expandCourseMarks(preamble,lapMarks,laps,suffix=null){
   const pre=preamble||[];
   const lap=lapMarks||[];
-  const nLaps=Math.max(1,Number(laps)||1);
-  pre.forEach(m=>{fullSeq.push({...m,lap:0,seqIdx:seqIdx++});});
-  for(let lapN=0;lapN<nLaps;lapN++){
-    lap.forEach(m=>{fullSeq.push({...m,lap:lapN+1,seqIdx:seqIdx++});});
-  }
-  return fullSeq;
+  const suf=suffix||[];
+  const entries=[
+    ...pre.map(m=>({name:m.name,tack:m.tack??m.roundTack??"S",partOfLap:false})),
+    ...lap.map(m=>({name:m.name,tack:m.tack??m.roundTack??"S",partOfLap:true})),
+    ...suf.map(m=>({name:m.name,tack:m.tack??m.roundTack??"S",partOfLap:false})),
+  ];
+  const pool=[...pre,...lap,...suf];
+  return expandEntriesForLaps(entries,Math.max(1,Number(laps)||1),(i)=>pool[i]??null).map(m=>({
+    ...m,
+    tack:m.tack??m.roundTack,
+  }));
 }
 /** Fingerprint of expanded mark order + S/F for invalidating leg/gate analysis when anything moves. */
 function courseGeometrySignature(preambleWithPos,lapWithPos,nLaps,sfEnds){
@@ -2405,8 +2410,10 @@ const MARK_ROUND_SAILING_COG_TOL_DEG=10;
 const MARK_MANOEUVRE_AT_MARK_M=10;
 /** Tack/gybe turn centre within this many GPS indices of a detected mark-rounding hit → excluded from racing stats (orange badge). */
 const MARK_MANOEUVRE_NEAR_ROUNDING_PTS=4;
-function allCourseMarkLocations(markPositions,preamble,laps){
-  const seq=expandCourseMarks(preamble,markPositions||[],Math.max(1,Number(laps)||1));
+function allCourseMarkLocations(markPositions,preamble,laps,resolvedCourseMarks=null){
+  const seq=resolvedCourseMarks?.length
+    ? expandResolvedCourseMarksForEngine(resolvedCourseMarks,Math.max(1,Number(laps)||1))
+    : expandCourseMarks(preamble,markPositions||[],Math.max(1,Number(laps)||1));
   const by=new Map();
   for(const x of seq){
     if(x?.name&&x.lat!=null&&x.lon!=null)by.set(x.name,{name:x.name,lat:x.lat,lon:x.lon});
@@ -2682,11 +2689,13 @@ function buildLegsFromRoundingsArray(pts,roundings,sfMid,startFinishLine,gpsToBo
   return{legs,legBuildLog};
 }
 
-function detectLegsFromMarks(pts,markPositions,laps,preamble=null,startFinishLine=null,gpsToBowM=2,windFromDeg=null,windwardMarkName=null,committeeLineInject=null){
+function detectLegsFromMarks(pts,markPositions,laps,preamble=null,startFinishLine=null,gpsToBowM=2,windFromDeg=null,windwardMarkName=null,committeeLineInject=null,resolvedCourseMarks=null){
   const injStart=!committeeLineInject||committeeLineInject.injectStart!==false;
   const injFinish=!committeeLineInject||committeeLineInject.injectFinish!==false;
   const emptyDiag={markSequenceLog:[],legBuildLog:[]};
-  const fullSeq=expandCourseMarks(preamble,markPositions||[],laps);
+  const fullSeq=resolvedCourseMarks?.length
+    ? expandResolvedCourseMarksForEngine(resolvedCourseMarks,laps)
+    : expandCourseMarks(preamble,markPositions||[],laps);
   if(fullSeq.length<2){
     return{legs:[],roundings:[],markSequenceLog:[{error:"need_at_least_2_marks",expandedCount:fullSeq.length,hint:"Preamble + lap marks need at least two waypoints with GPS (e.g. two mark rows in the WSC order)."}],legBuildLog:[]};
   }
@@ -3747,7 +3756,7 @@ function finalizeLinkageAndSessionManeuverStats(pts,legs,tacks,gybes){
   };
 }
 
-function runAnalysis(rawPts,userWind=null,markPositions=null,laps=1,preamble=null,detSettings=DETECTION_DEFAULTS,startFinishLine=null,windTuning=null,gpsToBowM=2,windwardMarkName=null,committeeLineInject=null){
+function runAnalysis(rawPts,userWind=null,markPositions=null,laps=1,preamble=null,detSettings=DETECTION_DEFAULTS,startFinishLine=null,windTuning=null,gpsToBowM=2,windwardMarkName=null,committeeLineInject=null,resolvedCourseMarks=null){
   if(!rawPts||rawPts.length<20)return null;
   const sorted=[...rawPts].sort((a,b)=>a.time-b.time);
   const deduped=sorted.filter((p,i)=>i===0||p.time!==sorted[i-1].time);
@@ -3769,8 +3778,8 @@ function runAnalysis(rawPts,userWind=null,markPositions=null,laps=1,preamble=nul
   const wd=windDerive.windDir;
   const windEst=windDerive.windEst;
   const manoeuvreEvents=applyDetectionSettings(manoeuvres,en,detSettings);
-  const markLocList=allCourseMarkLocations(markPositions,preamble,laps);
-  const legDetection=detectLegsFromMarks(en,markPositions||[],laps,preamble,startFinishLine,gpsToBowM,wd,windwardMarkName,committeeLineInject);
+  const markLocList=allCourseMarkLocations(markPositions,preamble,laps,resolvedCourseMarks);
+  const legDetection=detectLegsFromMarks(en,markPositions||[],laps,preamble,startFinishLine,gpsToBowM,wd,windwardMarkName,committeeLineInject,resolvedCourseMarks);
   const legDiagnostics={markSequence:legDetection.markSequenceLog||[],legBuild:legDetection.legBuildLog||[]};
   const roundingIdxs=legDetection?.roundings?.map(r=>r.idx).filter(i=>Number.isFinite(i)&&i>=0)??[];
   for(const m of manoeuvreEvents){

@@ -5,10 +5,14 @@ import { deleteSailingCourseAction, saveSailingCourseAction } from "@/app/action
 import { isLineMark, type CourseMarkOverride, type SailingCourseRow } from "@/lib/sailing-analysis/types";
 import type { SailingMarkVm } from "@/components/sailing-area-marks-section";
 import { DEFAULT_MAP_CENTER } from "@/lib/sailing-analysis/map-display";
+import {
+  courseToEntries,
+  entriesToPayload,
+  type MarkEntry,
+} from "@/lib/sailing-analysis/course-mark-entries";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-export type MarkEntry = { name: string; tack: "P" | "S"; firstLapOnly: boolean };
+export type { MarkEntry };
+export { courseToEntries, entriesToPayload };
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -23,35 +27,21 @@ export const COURSE_TYPE_LABEL: Record<string, string> = {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-export function courseToEntries(c: SailingCourseRow): MarkEntry[] {
-  const pre = ((c.marks_preamble ?? []) as [string, "P" | "S"][]).map(([name, tack]) => ({
-    name,
-    tack,
-    firstLapOnly: true,
-  }));
-  const seq = ((c.mark_sequence ?? []) as [string, "P" | "S"][]).map(([name, tack]) => ({
-    name,
-    tack,
-    firstLapOnly: false,
-  }));
-
-  // Preamble marks come AFTER the start line (seq[0]) and before the
-  // repeating marks (seq[1:]). They are rounded on the first lap only.
-  if (pre.length > 0 && seq.length > 0) {
-    return [seq[0], ...pre, ...seq.slice(1)];
-  }
-  return pre.length > 0 ? [...pre, ...seq] : seq;
+function markKindForName(
+  name: string,
+  byName: Map<string, SailingMarkVm>,
+  overrides: Record<string, CourseMarkOverride>,
+): string | undefined {
+  return byName.get(name)?.mark_kind ?? overrides[name]?.mark_kind;
 }
 
-export function entriesToPayload(entries: MarkEntry[]) {
-  return {
-    marks_preamble: entries
-      .filter((e) => e.firstLapOnly)
-      .map((e) => [e.name, e.tack] as [string, "P" | "S"]),
-    mark_sequence: entries
-      .filter((e) => !e.firstLapOnly)
-      .map((e) => [e.name, e.tack] as [string, "P" | "S"]),
-  };
+function defaultPartOfLap(
+  name: string,
+  byName: Map<string, SailingMarkVm>,
+  overrides: Record<string, CourseMarkOverride>,
+): boolean {
+  const kind = markKindForName(name, byName, overrides);
+  return kind ? !isLineMark(kind as SailingMarkVm["mark_kind"]) : true;
 }
 
 // ─── Mark editor row ──────────────────────────────────────────────────────────
@@ -93,15 +83,18 @@ function MarkEditorRow({
           {entry.tack === "P" ? "Port" : "Stbd"}
         </button>
       )}
-      <label className="flex shrink-0 cursor-pointer items-center gap-1 text-xs text-splice-ocean dark:text-splice-water">
+      <label
+        className="flex shrink-0 cursor-pointer items-center gap-1 text-xs text-splice-ocean dark:text-splice-water"
+        title="When checked, this mark is rounded on every lap. Uncheck for start, finish, or marks used only once per race."
+      >
         <input
           type="checkbox"
-          checked={entry.firstLapOnly}
-          onChange={(e) => onChange({ ...entry, firstLapOnly: e.target.checked })}
+          checked={entry.partOfLap}
+          onChange={(e) => onChange({ ...entry, partOfLap: e.target.checked })}
           className="h-3 w-3 rounded"
         />
-        <span className="hidden sm:inline">1st lap</span>
-        <span className="sm:hidden">1L</span>
+        <span className="hidden sm:inline">Part of lap</span>
+        <span className="sm:hidden">Lap</span>
       </label>
       <button
         type="button"
@@ -205,21 +198,37 @@ export function CourseDetailPanel({
   onOverridesChange: (v: Record<string, CourseMarkOverride>) => void;
   onEntriesChange?: (entries: MarkEntry[]) => void;
 }) {
-  const [entries, setEntries] = useState<MarkEntry[]>(() => courseToEntries(course));
+  const byName = useMemo(() => new Map(allMarks.map((m) => [m.name, m])), [allMarks]);
+  const markKindByName = useMemo(
+    () =>
+      new Map(
+        allMarks.map((m) => [m.name, m.mark_kind] as [string, string]).concat(
+          Object.entries(overrides)
+            .filter(([n]) => !byName.has(n))
+            .map(([n, o]) => [n, o.mark_kind ?? "laid"] as [string, string]),
+        ),
+      ),
+    [allMarks, overrides, byName],
+  );
+  const [entries, setEntries] = useState<MarkEntry[]>(() => courseToEntries(course, markKindByName));
+  const savedEntries = useMemo(
+    () => courseToEntries(course, markKindByName),
+    [course, markKindByName],
+  );
+  const hasOncePerRace = savedEntries.some((e) => !e.partOfLap);
 
   // Keep parent (and map) in sync with live editing state
   useEffect(() => {
     onEntriesChange?.(entries);
   }, [entries, onEntriesChange]);
-  const [crossSfEachLap, setCrossSfEachLap] = useState(course.cross_sf_each_lap ?? false);
-  const [addMarkName, setAddMarkName] = useState("");
-  const [addTack, setAddTack] = useState<"P" | "S">("S");
-  const [addLocalName, setAddLocalName] = useState("");
-  const [addLocalKind, setAddLocalKind] = useState<"laid" | "start_line" | "finish_line" | "start_finish">("laid");
 
-  const byName = useMemo(() => new Map(allMarks.map((m) => [m.name, m])), [allMarks]);
-  const savedEntries = useMemo(() => courseToEntries(course), [course]);
-  const hasFirstLap = savedEntries.some((e) => e.firstLapOnly);
+  useEffect(() => {
+    if (!editing) {
+      setEntries(courseToEntries(course, markKindByName));
+    }
+  }, [course, markKindByName, editing]);
+
+  const [crossSfEachLap, setCrossSfEachLap] = useState(course.cross_sf_each_lap ?? false);
 
   // Global marks + any virtual marks already defined in overrides for this course.
   const availableNames = useMemo(() => {
@@ -240,7 +249,10 @@ export function CourseDetailPanel({
 
   function handleAdd() {
     if (!addMarkName) return;
-    setEntries((prev) => [...prev, { name: addMarkName, tack: addTack, firstLapOnly: false }]);
+    setEntries((prev) => [
+      ...prev,
+      { name: addMarkName, tack: addTack, partOfLap: defaultPartOfLap(addMarkName, byName, overrides) },
+    ]);
     setAddMarkName("");
   }
 
@@ -256,12 +268,30 @@ export function CourseDetailPanel({
       ...(isLine ? { lat2: DEFAULT_MAP_CENTER[1], lon2: DEFAULT_MAP_CENTER[0] + 0.002 } : {}),
     };
     onOverridesChange({ ...overrides, [name]: newOverride });
-    setEntries((prev) => [...prev, { name, tack: "S", firstLapOnly: false }]);
+    setEntries((prev) => [...prev, { name, tack: "S", partOfLap: !isLine }]);
     setAddLocalName("");
   }
 
+  function handleCrossSfChange(checked: boolean) {
+    setCrossSfEachLap(checked);
+    setEntries((prev) => {
+      if (prev.length === 0) return prev;
+      const firstKind = markKindForName(prev[0]!.name, byName, overrides);
+      const lastKind = markKindForName(prev[prev.length - 1]!.name, byName, overrides);
+      return prev.map((e, i) => {
+        if (i === 0 && firstKind && isLineMark(firstKind as SailingMarkVm["mark_kind"])) {
+          return { ...e, partOfLap: checked };
+        }
+        if (i === prev.length - 1 && lastKind && isLineMark(lastKind as SailingMarkVm["mark_kind"])) {
+          return { ...e, partOfLap: checked };
+        }
+        return e;
+      });
+    });
+  }
+
   function cancelEdit() {
-    setEntries(courseToEntries(course));
+    setEntries(courseToEntries(course, markKindByName));
     setCrossSfEachLap(course.cross_sf_each_lap ?? false);
     onOverridesChange(course.course_mark_overrides ?? {});
     onEditingChange(false);
@@ -340,16 +370,14 @@ export function CourseDetailPanel({
               const markKind = byName.get(e.name)?.mark_kind;
               const isLine = markKind ? isLineMark(markKind) : false;
               const color = isLine ? "#3b82f6" : TACK_COLOR[e.tack];
-              // Line marks always keep their name; only non-line 1st-lap marks go lowercase
-              const display = (e.firstLapOnly && !isLine) ? e.name.toLowerCase() : e.name;
               return (
                 <span
                   key={i}
                   className="whitespace-nowrap text-xs font-medium"
-                  style={{ color }}
-                  title={e.firstLapOnly ? "1st lap only" : undefined}
+                  style={{ color, opacity: e.partOfLap ? 1 : 0.75 }}
+                  title={e.partOfLap ? "Part of each lap" : "Once per race"}
                 >
-                  {display}
+                  {e.name}
                   {i < savedEntries.length - 1 ? (
                     <span className="mx-0.5 text-splice-water dark:text-splice-ocean"> →</span>
                   ) : null}
@@ -357,9 +385,9 @@ export function CourseDetailPanel({
               );
             })
           )}
-          {hasFirstLap && (
+          {hasOncePerRace && (
             <span className="ml-1 text-xs text-splice-ocean dark:text-splice-water opacity-60">
-              (lowercase = 1st lap only)
+              (dimmed = once per race)
             </span>
           )}
         </div>
@@ -473,7 +501,7 @@ export function CourseDetailPanel({
                 type="checkbox"
                 name="cross_sf_each_lap"
                 checked={crossSfEachLap}
-                onChange={(e) => setCrossSfEachLap(e.target.checked)}
+                onChange={(e) => handleCrossSfChange(e.target.checked)}
                 className="h-4 w-4 rounded"
               />
               <span className="font-medium text-splice-navy dark:text-splice-foam">

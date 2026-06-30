@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { TACK_COLOR } from "@/components/sailing-area-courses-section";
 import {
-  courseToDisplayEntries,
+  courseToEntries,
   expandAnalysisRoundingSequence,
 } from "@/lib/sailing-analysis/course-rounding-sequence";
 import { isLineMark, type SailingCourseRow, type SailingMarkRow } from "@/lib/sailing-analysis/types";
@@ -17,16 +17,19 @@ export function CourseRoundingSequenceSummary({
   laps: number;
   clubMarks: SailingMarkRow[];
 }) {
-  const byName = useMemo(() => new Map(clubMarks.map((m) => [m.name, m])), [clubMarks]);
+  const kindByName = useMemo(
+    () => new Map(clubMarks.map((m) => [m.name, m.mark_kind])),
+    [clubMarks],
+  );
 
   const analysisSteps = useMemo(
-    () => expandAnalysisRoundingSequence(course, laps),
-    [course, laps],
+    () => expandAnalysisRoundingSequence(course, laps, kindByName),
+    [course, laps, kindByName],
   );
 
   const displayEntries = useMemo(
-    () => (course ? courseToDisplayEntries(course) : []),
-    [course],
+    () => (course ? courseToEntries(course, kindByName) : []),
+    [course, kindByName],
   );
 
   if (!course) {
@@ -38,28 +41,22 @@ export function CourseRoundingSequenceSummary({
   }
 
   const nLaps = Math.max(1, Math.round(laps) || 1);
-  const hasPreamble = analysisSteps.some((s) => s.firstLapOnly);
+  const prefixSteps = analysisSteps.filter((s) => s.lap === 0);
+  const suffixSteps = analysisSteps.filter((s) => s.lap === nLaps + 1);
 
   function markColor(name: string, tack: "P" | "S"): string {
-    const kind = byName.get(name)?.mark_kind;
+    const kind = kindByName.get(name);
     if (kind && isLineMark(kind)) return "#3b82f6";
     return TACK_COLOR[tack];
   }
 
-  function markLabel(name: string, firstLapOnly: boolean): string {
-    const kind = byName.get(name)?.mark_kind;
-    const isLine = kind ? isLineMark(kind) : false;
-    if (firstLapOnly && !isLine) return name.toLowerCase();
-    return name;
-  }
-
   const stepsByLap = new Map<number, typeof analysisSteps>();
   for (const step of analysisSteps) {
-    const key = step.firstLapOnly ? 0 : step.lap;
-    let list = stepsByLap.get(key);
+    if (step.lap === 0 || step.lap === nLaps + 1) continue;
+    let list = stepsByLap.get(step.lap);
     if (!list) {
       list = [];
-      stepsByLap.set(key, list);
+      stepsByLap.set(step.lap, list);
     }
     list.push(step);
   }
@@ -71,21 +68,17 @@ export function CourseRoundingSequenceSummary({
         {nLaps > 1 ? ` · ${nLaps} laps` : ""}
       </p>
       <p className="mt-1 text-xs text-splice-ocean dark:text-splice-water">
-        Leg detection uses this sequence: preamble once, then the full course mark list each lap.
-        Port = red, starboard = green, lines = blue. Lowercase = first lap only (course builder view).
+        Prefix and finish marks run once; marks with &ldquo;Part of lap&rdquo; repeat each lap.
+        Port = red, starboard = green, lines = blue.
       </p>
 
       <div className="mt-3 space-y-3">
-        {hasPreamble && stepsByLap.get(0)?.length ? (
+        {prefixSteps.length > 0 ? (
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-splice-ocean dark:text-splice-water">
-              First lap only
+              Start sequence (once)
             </p>
-            <MarkFlow
-              steps={stepsByLap.get(0)!}
-              markColor={markColor}
-              markLabel={(name) => markLabel(name, true)}
-            />
+            <MarkFlow steps={prefixSteps} markColor={markColor} />
           </div>
         ) : null}
 
@@ -98,30 +91,35 @@ export function CourseRoundingSequenceSummary({
                 Lap {lapN}
                 {nLaps > 1 ? ` of ${nLaps}` : ""}
               </p>
-              <MarkFlow
-                steps={steps}
-                markColor={markColor}
-                markLabel={(name) => markLabel(name, false)}
-              />
+              <MarkFlow steps={steps} markColor={markColor} />
             </div>
           );
         })}
+
+        {suffixSteps.length > 0 ? (
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-splice-ocean dark:text-splice-water">
+              Finish (once)
+            </p>
+            <MarkFlow steps={suffixSteps} markColor={markColor} />
+          </div>
+        ) : null}
       </div>
 
       {displayEntries.length > 0 ? (
         <div className="mt-4 border-t border-splice-sky/50 pt-3 dark:border-splice-ocean">
           <p className="text-xs font-medium text-splice-ocean dark:text-splice-water">
-            Course builder order (single lap)
+            Course builder order
           </p>
           <div className="mt-1 flex flex-wrap items-baseline gap-x-1 gap-y-0.5">
             {displayEntries.map((e, i) => (
               <span
                 key={`${e.name}-${i}`}
                 className="whitespace-nowrap text-xs font-medium"
-                style={{ color: markColor(e.name, e.tack) }}
-                title={e.firstLapOnly ? "1st lap only" : undefined}
+                style={{ color: markColor(e.name, e.tack), opacity: e.partOfLap ? 1 : 0.75 }}
+                title={e.partOfLap ? "Part of each lap" : "Once per race"}
               >
-                {markLabel(e.name, e.firstLapOnly)}
+                {e.name}
                 {i < displayEntries.length - 1 ? (
                   <span className="mx-0.5 text-splice-water dark:text-splice-ocean"> →</span>
                 ) : null}
@@ -137,11 +135,9 @@ export function CourseRoundingSequenceSummary({
 function MarkFlow({
   steps,
   markColor,
-  markLabel,
 }: {
   steps: { name: string; tack: "P" | "S" }[];
   markColor: (name: string, tack: "P" | "S") => string;
-  markLabel: (name: string) => string;
 }) {
   return (
     <div className="mt-1 flex flex-wrap items-baseline gap-x-1 gap-y-0.5">
@@ -152,7 +148,7 @@ function MarkFlow({
           style={{ color: markColor(step.name, step.tack) }}
           title={step.tack === "P" ? "Port rounding" : "Starboard rounding"}
         >
-          {markLabel(step.name)}
+          {step.name}
           <span className="ml-0.5 text-[10px] font-normal opacity-70">
             ({step.tack === "P" ? "P" : "S"})
           </span>

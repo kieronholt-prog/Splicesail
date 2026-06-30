@@ -1,4 +1,4 @@
-import { buildMarkPositionsFromClubData } from "./course-resolve";
+import { buildResolvedCourseMarks } from "./course-resolve";
 import { markNamesForCourse } from "./course-mark-names";
 import type { MarkOverride, SailingCourseRow, SailingMarkRow } from "./types";
 import type { StartFinishLineEnds } from "./analysis-types";
@@ -19,10 +19,10 @@ export function buildMapMarksDisplay(
 ): Record<string, MapMarkDisplay> {
   if (!course) return {};
 
-  const { markPositions, preamble } = buildMarkPositionsFromClubData(clubMarks, course, markOverrides);
+  const resolved = buildResolvedCourseMarks(clubMarks, course, markOverrides);
   const courseNames = new Set(markNamesForCourse(course));
   const roundByName = new Map<string, "P" | "S">();
-  for (const m of [...preamble, ...markPositions]) {
+  for (const m of resolved) {
     if (m.roundTack) roundByName.set(m.name, m.roundTack);
   }
 
@@ -49,8 +49,8 @@ export function buildCourseLinePoints(
   course: SailingCourseRow | null,
   markOverrides: Record<string, MarkOverride> = {},
 ): { lat: number; lon: number }[] {
-  const { markPositions, preamble } = buildMarkPositionsFromClubData(clubMarks, course, markOverrides);
-  return [...preamble, ...markPositions].map((m) => ({ lat: m.lat, lon: m.lon }));
+  const resolved = buildResolvedCourseMarks(clubMarks, course, markOverrides);
+  return resolved.map((m) => ({ lat: m.lat, lon: m.lon }));
 }
 
 export function markBadgeLabel(name: string): string {

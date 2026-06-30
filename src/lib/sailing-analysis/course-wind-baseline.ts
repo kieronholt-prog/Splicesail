@@ -1,4 +1,5 @@
-import type { ResolvedMarkPosition } from "./course-resolve";
+import type { ResolvedCourseMark } from "./course-resolve";
+import { expandEntriesForLaps } from "./course-mark-entries";
 
 const D = Math.PI / 180;
 
@@ -22,15 +23,16 @@ export function bearingDeg(lat1: number, lon1: number, lat2: number, lon2: numbe
   );
 }
 
-export function expandCourseMarkSequence(
-  preamble: ResolvedMarkPosition[],
-  lapMarks: ResolvedMarkPosition[],
+export function expandResolvedCourseMarks(
+  resolved: ResolvedCourseMark[],
   laps: number,
-): ResolvedMarkPosition[] {
-  const full: ResolvedMarkPosition[] = [...preamble];
-  const nLaps = Math.max(1, laps);
-  for (let i = 0; i < nLaps; i++) full.push(...lapMarks);
-  return full;
+): ResolvedCourseMark[] {
+  const entries = resolved.map((m) => ({
+    name: m.name,
+    tack: (m.roundTack ?? "S") as "P" | "S",
+    partOfLap: m.partOfLap,
+  }));
+  return expandEntriesForLaps(entries, laps, (i) => resolved[i] ?? null);
 }
 
 /**
@@ -38,15 +40,14 @@ export function expandCourseMarkSequence(
  * wind blows from the opposite direction (upwind along the leg).
  */
 export function buildWindTuningFromCourse(
-  preamble: ResolvedMarkPosition[],
-  markPositions: ResolvedMarkPosition[],
+  resolvedMarks: ResolvedCourseMark[],
   windwardMarkName: string | null,
   laps: number,
 ): CourseWindTuning | null {
   const name = windwardMarkName?.trim();
-  if (!name || markPositions.length === 0) return null;
+  if (!name || resolvedMarks.length === 0) return null;
 
-  const seq = expandCourseMarkSequence(preamble, markPositions, laps);
+  const seq = expandResolvedCourseMarks(resolvedMarks, laps);
   const idx = seq.findIndex((m) => m.name.trim() === name);
   if (idx < 0) return null;
 
