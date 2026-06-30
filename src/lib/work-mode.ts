@@ -65,6 +65,9 @@ function isAdminPath(pathname: string): boolean {
   if (/\/series\/new$/.test(pathname)) return true;
   if (/\/scoring$/.test(pathname)) return true;
   if (/\/fleets(\/|$)/.test(pathname) && pathname.includes("/groups/")) return true;
+  // Series hub + per-series schedule editor (not sailor race list / standings).
+  if (/\/groups\/[^/]+\/series$/.test(pathname)) return true;
+  if (/\/groups\/[^/]+\/series\/[^/]+$/.test(pathname)) return true;
   return false;
 }
 

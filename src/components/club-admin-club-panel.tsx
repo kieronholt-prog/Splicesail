@@ -56,7 +56,7 @@ export function ClubAdminClubPanel({
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Link
-            href={`/groups/${g.id}#club-series-maint`}
+            href={`/groups/${g.id}/series`}
             className="inline-flex shrink-0 justify-center rounded-lg bg-splice-navy px-4 py-2 text-sm font-medium text-white transition hover:bg-splice-navy-light dark:bg-splice-foam dark:text-splice-navy dark:hover:bg-splice-sky"
           >
             Maintain Series

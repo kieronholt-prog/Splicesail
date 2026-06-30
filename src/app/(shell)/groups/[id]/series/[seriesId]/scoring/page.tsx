@@ -91,7 +91,7 @@ export default async function SeriesScoringSettingsPage({
           </Link>
           <span className="mx-2 text-splice-water">·</span>
           <Link
-            href={`/groups/${groupId}#club-series-maint`}
+            href={`/groups/${groupId}/series`}
             className="text-splice-blue hover:underline dark:text-splice-water"
           >
             Series schedules

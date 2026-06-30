@@ -46,26 +46,29 @@ export default async function GroupSeriesPage({ params }: Props) {
       <main className="mx-auto w-full max-w-2xl">
         <p className="text-sm text-splice-ocean dark:text-splice-water">
           <Link
-            href={`/groups/${groupId}`}
+            href={isAdmin ? `/groups/${groupId}/club-admin` : `/groups/${groupId}`}
             className="text-splice-blue hover:underline dark:text-splice-water"
           >
-            ← {group.name}
+            ← {isAdmin ? "Club admin" : group.name}
           </Link>
         </p>
-        <div className="mt-4 flex flex-col gap-4">
+        <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-splice-navy dark:text-splice-surface">
               Series
             </h1>
             <p className="mt-1 text-sm text-splice-ocean dark:text-splice-water">
-              Schedule structure for this club. Races live inside a series. Club admins create series from{" "}
-              <Link href="/club-admin" className="font-medium text-splice-blue underline dark:text-splice-water">
-                Club admin
-              </Link>{" "}
-              or from this club hub (<span className="font-medium text-splice-navy-light dark:text-splice-sky">Series schedules</span>
-              ).
+              Maintain race schedules per series. Open a series to generate races, set fleets, and edit the calendar.
             </p>
           </div>
+          {isAdmin ? (
+            <Link
+              href={`/groups/${groupId}/series/new`}
+              className="inline-flex shrink-0 justify-center rounded-lg bg-splice-navy px-4 py-2 text-sm font-medium text-white dark:bg-splice-foam dark:text-splice-navy"
+            >
+              New series
+            </Link>
+          ) : null}
         </div>
 
         {error ? (
@@ -81,11 +84,13 @@ export default async function GroupSeriesPage({ params }: Props) {
               {isAdmin ? (
                 <>
                   {" "}
-                  <Link href="/club-admin" className="font-medium text-splice-blue underline dark:text-splice-water">
-                    Club admin
+                  <Link
+                    href={`/groups/${groupId}/series/new`}
+                    className="font-medium text-splice-blue underline dark:text-splice-water"
+                  >
+                    Create a new series
                   </Link>
-                  {" "}
-                  or create from this club hub.
+                  .
                 </>
               ) : null}
             </li>
@@ -107,6 +112,11 @@ export default async function GroupSeriesPage({ params }: Props) {
                       "Dates TBC"
                     )}
                   </span>
+                  {isAdmin ? (
+                    <span className="text-xs font-medium text-splice-ocean dark:text-splice-water">
+                      Maintain schedule →
+                    </span>
+                  ) : null}
                 </Link>
               </li>
             ))

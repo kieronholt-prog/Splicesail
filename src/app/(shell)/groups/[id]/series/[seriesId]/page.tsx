@@ -189,7 +189,7 @@ export default async function SeriesDetailPage({ params, searchParams }: Props) 
       <main className="mx-auto w-full max-w-2xl">
         <p className="text-sm text-splice-ocean dark:text-splice-water">
           <Link
-            href={`/groups/${groupId}#club-series-maint`}
+            href={`/groups/${groupId}/series`}
             className="text-splice-blue hover:underline dark:text-splice-water"
           >
             ← Series schedules

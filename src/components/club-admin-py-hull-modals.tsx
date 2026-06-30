@@ -345,7 +345,7 @@ export function ClubAdminPyHullModalsClient(props: Props) {
           </button>
         </div>
         <Link
-          href={`/groups/${groupId}#club-series-maint`}
+          href={`/groups/${groupId}/series`}
           className="inline-flex w-fit shrink-0 justify-center rounded-lg border border-splice-water bg-white px-4 py-2 text-sm font-medium text-splice-navy transition hover:bg-splice-foam dark:border-splice-ocean dark:bg-splice-navy dark:text-splice-surface dark:hover:bg-splice-navy"
         >
           Series scoring settings
