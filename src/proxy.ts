@@ -4,6 +4,7 @@ import {
   underDevelopmentBypassRedirect,
   underDevelopmentGateResponse,
 } from "@/lib/under-development";
+import { isStaffPath, WORK_MODE_COOKIE } from "@/lib/work-mode";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function proxy(request: NextRequest) {
@@ -51,7 +52,19 @@ export async function proxy(request: NextRequest) {
     return underDevelopmentGateResponse(request);
   }
 
-  supabaseResponse.headers.set("x-pathname", request.nextUrl.pathname);
+  const pathname = request.nextUrl.pathname;
+  if (user && !isStaffPath(pathname)) {
+    const workMode = request.cookies.get(WORK_MODE_COOKIE)?.value;
+    if (workMode && workMode !== "sailor") {
+      supabaseResponse.cookies.set(WORK_MODE_COOKIE, "sailor", {
+        path: "/",
+        maxAge: 60 * 60 * 24 * 365,
+        sameSite: "lax",
+      });
+    }
+  }
+
+  supabaseResponse.headers.set("x-pathname", pathname);
   return supabaseResponse;
 }
 

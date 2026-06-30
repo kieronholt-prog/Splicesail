@@ -107,6 +107,9 @@ export default async function RoTrackAnalysisPage({ params, searchParams }: Prop
     startSignalLabel: fleetStartLabel(f.start_signal_at, clubTz),
   }));
 
+  const initialFleetId =
+    q.fleet && raceFleets.some((f) => f.id === q.fleet) ? q.fleet : (raceFleets[0]?.id ?? null);
+
   const settingsByFleetId: Record<string, RaceFleetAnalysisSettingsRow | null> = {};
   const fleetTracksByFleetId: Record<string, Awaited<ReturnType<typeof loadRaceFleetTracks>>> = {};
   const pendingByFleetId: Record<string, number> = {};
@@ -125,9 +128,10 @@ export default async function RoTrackAnalysisPage({ params, searchParams }: Prop
 
   for (const f of raceFleets) {
     settingsByFleetId[f.id] = settingsMap.get(f.id) ?? null;
-    fleetTracksByFleetId[f.id] = await loadRaceFleetTracks(supabase, raceId, {
-      raceFleetId: f.id,
-    });
+    const loadTracks = f.id === initialFleetId;
+    fleetTracksByFleetId[f.id] = loadTracks
+      ? await loadRaceFleetTracks(supabase, raceId, { raceFleetId: f.id })
+      : [];
     pendingByFleetId[f.id] = pendingByFleet.get(f.id) ?? 0;
 
     const previewTrack = fleetTracksByFleetId[f.id][0]?.points ?? [];
@@ -302,7 +306,7 @@ export default async function RoTrackAnalysisPage({ params, searchParams }: Prop
             fleetTracksByFleetId={fleetTracksByFleetId}
             pendingByFleetId={pendingByFleetId}
             raceStartByFleetId={raceStartByFleetId}
-            initialFleetId={q.fleet}
+            initialFleetId={initialFleetId ?? undefined}
           />
         </div>
 

@@ -5,6 +5,9 @@ import {
 } from "@/lib/track-points-loader";
 import { resolveSubmissionRaceFleetId } from "@/lib/sailing-analysis/race-fleet-analysis-settings";
 
+/** Max points per track when loading map overlays (keeps RSC payloads small). */
+export const FLEET_TRACK_MAP_PREVIEW_MAX_POINTS = 500;
+
 export const FLEET_TRACK_PALETTE = [
   "#e879f9",
   "#38bdf8",
@@ -40,6 +43,19 @@ type FleetSubmissionRow = {
     | { default_sail_number: string | null; label: string | null }[]
     | null;
 };
+
+function downsampleTrackPoints<T extends { lat: number; lon: number }>(
+  points: T[],
+  maxPoints: number,
+): T[] {
+  if (points.length <= maxPoints) return points;
+  const step = Math.ceil(points.length / maxPoints);
+  const out: T[] = [];
+  for (let i = 0; i < points.length; i += step) out.push(points[i]!);
+  const last = points[points.length - 1]!;
+  if (out[out.length - 1] !== last) out.push(last);
+  return out;
+}
 
 async function resolveFleetTrackPoints(
   supabase: SupabaseClient,
@@ -132,7 +148,7 @@ export async function loadRaceFleetTracks(
       id: sub.id,
       label,
       color: FLEET_TRACK_PALETTE[colorIndex % FLEET_TRACK_PALETTE.length],
-      points,
+      points: downsampleTrackPoints(points, FLEET_TRACK_MAP_PREVIEW_MAX_POINTS),
     });
     colorIndex++;
   }

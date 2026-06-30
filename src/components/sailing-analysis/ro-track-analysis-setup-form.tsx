@@ -1,11 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   RoTrackAnalysisFleetPanel,
   type RaceFleetVm,
 } from "@/components/sailing-analysis/ro-track-analysis-fleet-panel";
-import { confirmAllRaceFleetAnalysisAction } from "@/app/actions/race-track-analysis";
+import {
+  confirmAllRaceFleetAnalysisAction,
+  loadRaceFleetTracksAction,
+} from "@/app/actions/race-track-analysis";
 import type { SailingCourseRow, SailingMarkRow } from "@/lib/sailing-analysis/types";
 import type { FleetTrackOverlay } from "@/lib/sailing-analysis/load-race-fleet-tracks";
 import type { RaceFleetAnalysisSettingsRow } from "@/lib/sailing-analysis/race-fleet-analysis-settings";
@@ -18,7 +21,7 @@ export function RoTrackAnalysisSetupForm({
   clubMarks,
   raceFleets,
   settingsByFleetId,
-  fleetTracksByFleetId,
+  fleetTracksByFleetId: initialFleetTracksByFleetId,
   pendingByFleetId,
   raceStartByFleetId,
   initialFleetId,
@@ -42,6 +45,29 @@ export function RoTrackAnalysisSetupForm({
       : raceFleets[0]?.id ?? null;
 
   const [selectedFleetId, setSelectedFleetId] = useState<string | null>(defaultFleetId);
+  const [fleetTracksByFleetId, setFleetTracksByFleetId] = useState(initialFleetTracksByFleetId);
+  const [loadingFleetTracks, setLoadingFleetTracks] = useState(false);
+  const serverLoadedFleetIds = useRef(
+    new Set(initialFleetId ? [initialFleetId] : []),
+  );
+
+  useEffect(() => {
+    if (!selectedFleetId) return;
+    if (serverLoadedFleetIds.current.has(selectedFleetId)) return;
+
+    let cancelled = false;
+    setLoadingFleetTracks(true);
+    void loadRaceFleetTracksAction(raceId, selectedFleetId).then((tracks) => {
+      if (cancelled) return;
+      serverLoadedFleetIds.current.add(selectedFleetId);
+      setFleetTracksByFleetId((prev) => ({ ...prev, [selectedFleetId]: tracks }));
+      setLoadingFleetTracks(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [raceId, selectedFleetId]);
 
   const selectedFleet = raceFleets.find((f) => f.id === selectedFleetId) ?? null;
 
@@ -111,6 +137,9 @@ export function RoTrackAnalysisSetupForm({
       </div>
 
       {selectedFleet && selectedFleetId ? (
+        loadingFleetTracks ? (
+          <p className="text-sm text-splice-ocean dark:text-splice-water">Loading fleet tracks…</p>
+        ) : (
         <RoTrackAnalysisFleetPanel
           key={selectedFleetId}
           fleet={selectedFleet}
@@ -125,6 +154,7 @@ export function RoTrackAnalysisSetupForm({
           savedSettings={settingsByFleetId[selectedFleetId] ?? null}
           pendingCount={pendingByFleetId[selectedFleetId] ?? 0}
         />
+        )
       ) : null}
 
       {totalPending > 0 ? (

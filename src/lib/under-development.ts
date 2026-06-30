@@ -72,7 +72,7 @@ export function underDevelopmentGateResponse(request: NextRequest): NextResponse
   const url = request.nextUrl.clone();
   url.pathname = "/under-development";
   url.search = "";
-  return NextResponse.rewrite(url);
+  return NextResponse.redirect(url);
 }
 
 /** @deprecated Use shouldGateUnderDevelopment + underDevelopmentGateResponse after auth check. */

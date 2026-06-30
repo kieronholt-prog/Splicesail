@@ -24,11 +24,23 @@ export function parseWorkModeCookie(value: string | undefined): WorkMode | null 
   return null;
 }
 
+export function isStaffPath(pathname: string): boolean {
+  return isAdminPath(pathname) || isRaceOfficerPath(pathname);
+}
+
 export function resolveWorkMode(
   cookieValue: string | undefined,
   capabilities: WorkModeCapabilities,
   pathname?: string,
 ): WorkMode {
+  if (pathname) {
+    const fromStaffRoute = staffRouteWorkMode(pathname);
+    if (fromStaffRoute && capabilities.availableModes.includes(fromStaffRoute)) {
+      return fromStaffRoute;
+    }
+    // Sailor chrome on non-staff URLs — ignore a stale admin/RO cookie (e.g. opening `/`).
+    if (!isStaffPath(pathname)) return "sailor";
+  }
   const stored = parseWorkModeCookie(cookieValue);
   if (stored && capabilities.availableModes.includes(stored)) return stored;
   if (pathname) return inferWorkModeFromPath(pathname, capabilities);
@@ -61,6 +73,9 @@ function isRaceOfficerPath(pathname: string): boolean {
   if (/\/race-officer(\/|$)/.test(pathname)) return true;
   if (/\/finishes$/.test(pathname)) return true;
   if (/\/manage$/.test(pathname) && pathname.includes("/races/")) return true;
+  if (/\/track-analysis$/.test(pathname)) return true;
+  if (/\/track-compare$/.test(pathname)) return true;
+  if (/\/entries\/[^/]+\/context$/.test(pathname)) return true;
   return false;
 }
 

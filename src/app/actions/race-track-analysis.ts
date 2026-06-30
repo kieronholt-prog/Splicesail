@@ -16,6 +16,7 @@ import {
   loadRaceFleetAnalysisSettingsMap,
 } from "@/lib/sailing-analysis/race-fleet-analysis-settings";
 import { loadOrSeedRaceFleetsForTrackAnalysis } from "@/lib/ensure-race-fleets-for-track-analysis";
+import { loadRaceFleetTracks, type FleetTrackOverlay } from "@/lib/sailing-analysis/load-race-fleet-tracks";
 
 function trackAnalysisPath(groupId: string, seriesId: string, raceId: string, query?: string) {
   const base = `/groups/${groupId}/series/${seriesId}/races/${raceId}/track-analysis`;
@@ -310,4 +311,27 @@ export async function countPendingRaceTrackAnalysis(groupId: string): Promise<nu
     .eq("status", "pending_ro");
 
   return count ?? 0;
+}
+
+/** Load map overlay tracks for one fleet (client-side fleet switch on track-analysis). */
+export async function loadRaceFleetTracksAction(
+  raceId: string,
+  raceFleetId: string,
+): Promise<FleetTrackOverlay[]> {
+  const { supabase, user } = await getServerAuth();
+  if (!user) return [];
+
+  const { data: race } = await supabase.from("races").select("id, group_id").eq("id", raceId).maybeSingle();
+  if (!race?.group_id) return [];
+
+  const { data: me } = await supabase
+    .from("group_memberships")
+    .select("role")
+    .eq("group_id", race.group_id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (me?.role !== "club_admin" && me?.role !== "race_officer") return [];
+
+  return loadRaceFleetTracks(supabase, raceId, { raceFleetId });
 }
