@@ -94,6 +94,8 @@ export async function loadMobileSeriesResults(
   if (!entryRows?.length) return [];
 
   const trackLinks = await loadUserTrackLinks(userId);
+
+  type SeriesAcc = {
     seriesId: string;
     seriesName: string;
     groupId: string;
