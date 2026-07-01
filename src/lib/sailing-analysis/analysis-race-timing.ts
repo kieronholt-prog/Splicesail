@@ -1,5 +1,4 @@
 import {
-  cropTrackPoints,
   findFinishLineCrossingUnix,
   runAnalysis,
 } from "./engine-core";
@@ -136,27 +135,8 @@ export function runAnalysisWithRaceCrop(
   );
 
   const crop = planRaceCrop(sorted, finishUnix, gunUnix);
-  let results: AnalysisResult = fullResults;
-  if (crop.applied) {
-    const cropped = cropTrackPoints(sorted, crop.cropStartSec, crop.cropDurationSec);
-    if (cropped.length >= 20) {
-      const croppedResults = runAnalysis(
-        cropped as typeof rawPts,
-        userWind as never,
-        markPositions as never,
-        laps,
-        preamble as never,
-        detSettings as never,
-        startFinishLine as never,
-        windTuning as never,
-        gpsToBowM,
-        windwardMarkName as never,
-        committeeLineInject as never,
-        resolvedCourseMarks as never,
-      );
-      if (croppedResults) results = croppedResults;
-    }
-  }
+  // Keep full-track legs, manoeuvres, and gates — crop is used for race elapsed timing only.
+  const results: AnalysisResult = fullResults;
 
   const raceElapsedSec =
     gunUnix != null && finishUnix != null && Number.isFinite(finishUnix - gunUnix)

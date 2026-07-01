@@ -2994,6 +2994,17 @@ function vmgToWindKts(sogKts,cogDeg,windFromDeg){
   const twa=acuteTwaFromWindDeg(cogDeg,windFromDeg);
   return sogKts*Math.cos(twa*D);
 }
+/** Component of speed downwind (away from wind source): positive when sailing off the wind. */
+function vmgDownwindKts(sogKts,cogDeg,windFromDeg){
+  const up=vmgToWindKts(sogKts,cogDeg,windFromDeg);
+  if(up==null||!Number.isFinite(up))return null;
+  return -up;
+}
+function vmgForManeuverChart(sogKts,cogDeg,windFromDeg,maneuverType){
+  return maneuverType==="gybe"
+    ? vmgDownwindKts(sogKts,cogDeg,windFromDeg)
+    : vmgToWindKts(sogKts,cogDeg,windFromDeg);
+}
 
 const MANEUVER_CHART_SAMPLE_STEP_SEC=0.25;
 /** Half-width (s) of tack VMG chart and **mean VMG** sample each side of wind-line crossing (T). */
@@ -3045,6 +3056,21 @@ function meanVmgUpwindOnlyInTimeWindow(pts,t0,t1,windFromDeg,legTypeByIdx,roundi
   }
   return cnt>=minSamples?+(sum/cnt).toFixed(3):null;
 }
+/** Mean positive VMG-to-wind (kts) on [t0,t1], ignoring leg type but skipping mark-rounding samples. */
+function meanPositiveVmgToWindInTimeWindow(pts,t0,t1,windFromDeg,roundingMask,step,minSamples=4){
+  if(!(t1>t0)||!Number.isFinite(windFromDeg))return null;
+  let sum=0,cnt=0;
+  for(let t=t0;t<=t1+1e-9;t+=step){
+    const j=nearestTimeIndexInSortedGps(pts,t);
+    if(roundingMask&&roundingMask[j])continue;
+    const sp=speedKtsAtTime(pts,t);
+    const cg=cogDegAtTime(pts,t);
+    if(sp==null||cg==null)continue;
+    const v=vmgToWindKts(sp,cg,windFromDeg);
+    if(v!=null&&Number.isFinite(v)&&v>0.05){sum+=v;cnt++;}
+  }
+  return cnt>=minSamples?+(sum/cnt).toFixed(3):null;
+}
 /** Sets `tack.q` = % of upwind reference VMG retained through the tack; adds tack + ref VMG fields on tack and `performance`. */
 function applyTackVmgQualityVsUpwindRef(pts,tack,windFromDeg,legs,roundingMask){
   if(!tack||tack.type!=="tack"||!tack.performance)return;
@@ -3060,11 +3086,18 @@ function applyTackVmgQualityVsUpwindRef(pts,tack,windFromDeg,legs,roundingMask){
     const jCross=nearestTimeIndexInSortedGps(pts,tCross);
     const leg=findLegContainingTrackIndex(legs,jCross);
     const legV=leg&&(leg.avgVmgToWind!=null&&Number.isFinite(leg.avgVmgToWind)?leg.avgVmgToWind:leg.avgVMG);
-    if(legV!=null&&Number.isFinite(legV)&&Math.abs(legV)>0.05)refMean=+Number(legV).toFixed(3),refSource="leg";
+    if(legV!=null&&Number.isFinite(legV)){
+      const av=Math.abs(Number(legV));
+      if(av>0.05)refMean=+av.toFixed(3),refSource="leg";
+    }
+  }
+  if(refMean==null||!Number.isFinite(Number(refMean))||Number(refMean)<=0.05){
+    const anyPos=meanPositiveVmgToWindInTimeWindow(pts,w0,w1,windFromDeg,roundingMask,step);
+    if(anyPos!=null&&Number.isFinite(anyPos))refMean=anyPos,refSource="window_any";
   }
   const tackMean=meanVmgToWindInTimeIntervalSampled(pts,tInit,tComplete,windFromDeg,step);
-  const refN=refMean!=null&&Number.isFinite(Number(refMean))?Number(refMean):null;
-  const tackN=tackMean!=null?Number(tackMean):null;
+  const refN=refMean!=null&&Number.isFinite(Number(refMean))?Math.abs(Number(refMean)):null;
+  const tackN=tackMean!=null?Math.max(0,Number(tackMean)):null;
   tack.refUpwindWindowVmgKts=refN;
   tack.refVmgSource=refSource;
   tack.tackMeanVmgKts=tackN;
@@ -3075,8 +3108,8 @@ function applyTackVmgQualityVsUpwindRef(pts,tack,windFromDeg,legs,roundingMask){
   else tack.q=null;
 }
 
-/** VMG to wind vs **tRel = time − t_cross**; window [T−10s, T+10s]. */
-function buildManeuverWindowChartSeries(pts,performance,windFromDeg){
+/** VMG to wind (tack) or downwind VMG (gybe) vs **tRel = time − t_cross**; window [T−10s, T+10s]. */
+function buildManeuverWindowChartSeries(pts,performance,windFromDeg,maneuverType="tack"){
   if(!pts?.length||!performance||typeof performance!=="object")return null;
   const tInit=Number(performance.t_init),tComplete=Number(performance.t_complete),tCross=Number(performance.t_cross);
   if(!Number.isFinite(tInit)||!Number.isFinite(tComplete)||!Number.isFinite(tCross)||!Number.isFinite(windFromDeg))return null;
@@ -3090,7 +3123,7 @@ function buildManeuverWindowChartSeries(pts,performance,windFromDeg){
     const sp=speedKtsAtTime(pts,ta);
     const cg=cogDegAtTime(pts,ta);
     let vmg=null;
-    if(sp!=null&&cg!=null&&Number.isFinite(sp)&&Number.isFinite(cg))vmg=vmgToWindKts(sp,cg,windFromDeg);
+    if(sp!=null&&cg!=null&&Number.isFinite(sp)&&Number.isFinite(cg))vmg=vmgForManeuverChart(sp,cg,windFromDeg,maneuverType);
     data.push({
       tRel,
       vmg:vmg!=null&&Number.isFinite(vmg)?+vmg.toFixed(3):null,
@@ -3139,6 +3172,7 @@ function meanVmgToWindAroundCrossing(pts,tCross,windFromDeg,halfSec=MANEUVER_CHA
 
 function buildAllTacksVmgOverlayData(pts,tacks,windFromDeg,halfSec=MANEUVER_CHART_HALF_WINDOW_SEC){
   if(!pts?.length||!tacks?.length||!Number.isFinite(windFromDeg))return[];
+  const maneuverType=tacks[0]?.type==="gybe"?"gybe":"tack";
   const step=MANEUVER_CHART_SAMPLE_STEP_SEC;
   const rows=[];
   for(let tr=-halfSec;tr<=halfSec+1e-9;tr+=step){
@@ -3150,7 +3184,7 @@ function buildAllTacksVmgOverlayData(pts,tacks,windFromDeg,halfSec=MANEUVER_CHAR
         const ta=tc+tr;
         const sp=speedKtsAtTime(pts,ta);
         const cg=cogDegAtTime(pts,ta);
-        if(sp!=null&&cg!=null&&Number.isFinite(sp)&&Number.isFinite(cg))v=vmgToWindKts(sp,cg,windFromDeg);
+        if(sp!=null&&cg!=null&&Number.isFinite(sp)&&Number.isFinite(cg))v=vmgForManeuverChart(sp,cg,windFromDeg,maneuverType);
       }
       row[`vmg_${i}`]=v!=null&&Number.isFinite(v)?+v.toFixed(3):null;
     });
@@ -3927,14 +3961,14 @@ function runAnalysis(rawPts,userWind=null,markPositions=null,laps=1,preamble=nul
     const perf=computeSingleManeuverPerformance(en,t,legs,wd);
     if(perf){
       t.performance=perf;
-      t.perfChart=buildManeuverWindowChartSeries(en,perf,wd);
+      t.perfChart=buildManeuverWindowChartSeries(en,perf,wd,"tack");
     }
   });
   gybes.forEach(g=>{
     const perf=computeSingleManeuverPerformance(en,g,legs,wd);
     if(perf){
       g.performance=perf;
-      g.perfChart=buildManeuverWindowChartSeries(en,perf,wd);
+      g.perfChart=buildManeuverWindowChartSeries(en,perf,wd,"gybe");
     }
   });
   tacks.forEach(t=>applyTackVmgQualityVsUpwindRef(en,t,wd,legs,roundingPointMask));
