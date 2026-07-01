@@ -26,6 +26,12 @@ import { markNamesForCourse } from "@/lib/sailing-analysis/course-mark-names";
 import type { StartFinishLineEnds } from "@/lib/sailing-analysis/analysis-types";
 import type { FleetCollatedCounts, FleetTrackOverlay } from "@/lib/sailing-analysis/load-race-fleet-tracks";
 import type { RaceFleetAnalysisSettingsRow } from "@/lib/sailing-analysis/race-fleet-analysis-settings";
+import {
+  fleetAnalysisSummary,
+  fleetAnalysisTone,
+  fleetHasCourseSettings,
+  fleetStatusBannerClass,
+} from "@/lib/sailing-analysis/ro-fleet-analysis-status";
 
 export type RaceFleetVm = {
   id: string;
@@ -62,6 +68,9 @@ export function RoTrackAnalysisFleetPanel({
   const readyCount = collatedCounts.ready;
   const totalCollated = pendingCount + readyCount;
   const tracksOnMap = fleetTracks.length;
+  const hasCourseSettings = fleetHasCourseSettings(savedSettings);
+  const statusTone = fleetAnalysisTone(collatedCounts, hasCourseSettings);
+  const statusSummary = fleetAnalysisSummary(collatedCounts, hasCourseSettings);
   const [courseLetter, setCourseLetter] = useState(() =>
     defaultCourseLetterValue(savedSettings?.course_letter, courses),
   );
@@ -112,40 +121,13 @@ export function RoTrackAnalysisFleetPanel({
         </p>
       ) : null}
 
-      {totalCollated > 0 || tracksOnMap > 0 ? (
-        <p className="rounded-lg border border-splice-sky/60 bg-splice-sky/10 px-3 py-2 text-sm text-splice-navy dark:text-splice-foam">
-          {tracksOnMap > 0 ? (
-            <>
-              <strong>{tracksOnMap}</strong> collated track{tracksOnMap !== 1 ? "s" : ""} on map
-            </>
-          ) : (
-            <>
-              <strong>{totalCollated}</strong> collated track{totalCollated !== 1 ? "s" : ""} in this fleet
-            </>
-          )}
-          {pendingCount > 0 ? (
-            <>
-              {" "}
-              · <strong>{pendingCount}</strong> awaiting analysis
-            </>
-          ) : null}
-          {readyCount > 0 ? (
-            <>
-              {" "}
-              · <strong>{readyCount}</strong> already analysed
-            </>
-          ) : null}
-          {tracksOnMap > 0 && tracksOnMap < totalCollated ? (
-            <span className="mt-1 block text-xs opacity-90">
-              Some tracks have no GPS on the map yet — sailors may need to re-open their upload to cache points.
-            </span>
-          ) : null}
+      <p className={fleetStatusBannerClass(statusTone)}>{statusSummary}</p>
+      {tracksOnMap > 0 && tracksOnMap < totalCollated ? (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+          {tracksOnMap} of {totalCollated} tracks have GPS on the map — sailors may need to re-open their upload to
+          cache points (Strava) or refresh this page (GPX/FIT).
         </p>
-      ) : (
-        <p className="text-sm text-splice-ocean dark:text-splice-water">
-          No collated tracks in this fleet yet. Set course and laps below before uploads arrive.
-        </p>
-      )}
+      ) : null}
 
       <form action={saveAndAnalyseRaceFleetAnalysisAction} className="flex flex-col gap-6">
         <input type="hidden" name="group_id" value={groupId} />

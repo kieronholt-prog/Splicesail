@@ -11,6 +11,12 @@ import {
 import type { SailingCourseRow, SailingMarkRow } from "@/lib/sailing-analysis/types";
 import type { FleetCollatedCounts, FleetTrackOverlay } from "@/lib/sailing-analysis/load-race-fleet-tracks";
 import type { RaceFleetAnalysisSettingsRow } from "@/lib/sailing-analysis/race-fleet-analysis-settings";
+import {
+  fleetAnalysisTone,
+  fleetHasCourseSettings,
+  fleetPillClass,
+  fleetPillSuffix,
+} from "@/lib/sailing-analysis/ro-fleet-analysis-status";
 
 export function RoTrackAnalysisSetupForm({
   groupId,
@@ -69,13 +75,6 @@ export function RoTrackAnalysisSetupForm({
 
   const selectedFleet = raceFleets.find((f) => f.id === selectedFleetId) ?? null;
 
-  const pillBase =
-    "rounded-full px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap";
-  const pillActive =
-    "bg-splice-navy text-white dark:bg-splice-foam dark:text-splice-navy";
-  const pillInactive =
-    "border border-splice-water text-splice-navy hover:bg-splice-sky/30 dark:border-splice-ocean dark:text-splice-foam";
-
   if (raceFleets.length === 0) {
     return (
       <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
@@ -90,34 +89,29 @@ export function RoTrackAnalysisSetupForm({
   return (
     <div className="flex flex-col gap-8">
       <p className="text-sm text-splice-ocean dark:text-splice-water">
-        Select a fleet below, set <strong className="font-medium text-splice-navy dark:text-splice-foam">course and laps</strong>
-        , drag marks if needed, then click <strong className="font-medium text-splice-navy dark:text-splice-foam">Save &amp; analyse</strong>{" "}
-        to save settings and run analysis on all collated tracks in that fleet.
+        Fleet pills show status: <span className="text-amber-700 dark:text-amber-300">amber</span> = no settings or
+        tracks yet, <span className="text-red-700 dark:text-red-300">red</span> = tracks waiting for course settings,{" "}
+        <span className="text-emerald-700 dark:text-emerald-300">green</span> = course saved (new uploads analyse
+        automatically). Select a fleet, set course and laps, then click{" "}
+        <strong className="font-medium text-splice-navy dark:text-splice-foam">Save &amp; analyse</strong> to refresh
+        analysis on existing tracks.
       </p>
 
       <div className="flex flex-wrap gap-2">
         {raceFleets.map((f) => {
           const counts = collatedCountsByFleetId[f.id] ?? { pending: 0, ready: 0 };
-          const total = counts.pending + counts.ready;
-          const saved = Boolean(settingsByFleetId[f.id]?.course_letter);
-          const pillDetail =
-            total > 0
-              ? counts.pending > 0 && counts.ready > 0
-                ? ` (${total}: ${counts.pending} pending)`
-                : counts.pending > 0
-                  ? ` (${counts.pending} pending)`
-                  : ` (${total})`
-              : "";
+          const hasSettings = fleetHasCourseSettings(settingsByFleetId[f.id]);
+          const tone = fleetAnalysisTone(counts, hasSettings);
+          const selected = selectedFleetId === f.id;
           return (
             <button
               key={f.id}
               type="button"
               onClick={() => setSelectedFleetId(f.id)}
-              className={`${pillBase} ${selectedFleetId === f.id ? pillActive : pillInactive}`}
+              className={fleetPillClass(tone, selected)}
             >
               {f.name}
-              {pillDetail}
-              {saved ? " ✓" : ""}
+              {fleetPillSuffix(counts, hasSettings)}
             </button>
           );
         })}

@@ -21,6 +21,7 @@ import {
 } from "@/lib/sailing-analysis";
 import type { AnalysisMode, MarkOverride } from "@/lib/sailing-analysis/types";
 import { ensureFleetAnalysisSettingsRow, ensureRaceEntryForTrackSubmission } from "@/lib/sailing-analysis/race-fleet-analysis-settings";
+import { tryAutoAnalyseCollatedSubmission } from "@/lib/sailing-analysis/auto-collated-fleet-analysis";
 
 function redirectTracks(submissionId: string, query?: string) {
   redirect(`/tracks/${submissionId}${query ? `?${query}` : ""}`);
@@ -381,6 +382,27 @@ export async function setAnalysisModeAction(formData: FormData) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", submissionId);
+
+  if (mode === "collated" && sub.race_id) {
+    const { data: freshSub } = await supabase
+      .from("race_track_submissions")
+      .select(
+        "id, user_id, race_id, race_entry_id, boat_id, track_source, external_activity_id, storage_path",
+      )
+      .eq("id", submissionId)
+      .maybeSingle();
+    if (freshSub) {
+      try {
+        await tryAutoAnalyseCollatedSubmission(supabase, {
+          groupId: sub.group_id,
+          raceId: sub.race_id,
+          submission: freshSub,
+        });
+      } catch (err) {
+        console.error("tryAutoAnalyseCollatedSubmission:", err);
+      }
+    }
+  }
 
   revalidatePath("/tracks");
   revalidatePath("/");

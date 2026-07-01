@@ -27,6 +27,7 @@ import {
   RO_RACE_LINE_NAV_ACTIVE_CLASS,
   RO_RACE_LINE_NAV_LINK_CLASS,
 } from "@/lib/ro-race-line-nav";
+import { fleetStatusBannerClass } from "@/lib/sailing-analysis/ro-fleet-analysis-status";
 
 export const dynamic = "force-dynamic";
 
@@ -200,19 +201,25 @@ export default async function RoTrackAnalysisPage({ params, searchParams }: Prop
             {error ?? loadError}
           </p>
         ) : null}
-        {q.settings_saved === "1" ? (
-          <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-            Fleet course settings saved.
-          </p>
-        ) : null}
-        {q.analysis_ready === "1" ? (
-          <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-            Settings saved — track analysis complete
-            {q.analysed ? ` (${q.analysed} track${q.analysed === "1" ? "" : "s"} processed` : ""}
-            {q.skipped && q.skipped !== "0"
-              ? `; ${q.skipped} skipped (insufficient GPS or not in this fleet)`
-              : ""}
-            ). Sailors are notified on their home page.
+        {q.analysis_ready === "1" || q.settings_saved === "1" ? (
+          <p className={`mt-4 ${fleetStatusBannerClass("green")}`}>
+            {(() => {
+              const fleetName = raceFleets.find((f) => f.id === q.fleet)?.name;
+              const prefix = fleetName ? `${fleetName}: ` : "";
+              if (q.analysis_ready === "1") {
+                const analysed = q.analysed ? Number(q.analysed) : 0;
+                const skipped = q.skipped ? Number(q.skipped) : 0;
+                const parts = [`${prefix}Course saved`];
+                if (analysed > 0) {
+                  parts.push(`${analysed} track${analysed === 1 ? "" : "s"} analysed`);
+                }
+                if (skipped > 0) {
+                  parts.push(`${skipped} skipped (insufficient GPS or wrong fleet)`);
+                }
+                return `${parts.join(" — ")}. Sailors are notified on their home page.`;
+              }
+              return `${prefix}Course settings saved — new uploads in this fleet will analyse automatically.`;
+            })()}
           </p>
         ) : null}
         {fleetsSyncedOnLoad || q.fleets_synced ? (
