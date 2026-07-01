@@ -1,0 +1,849 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		008401E303BBF9BC867F8436 /* WindKalmanFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 255D3D1CAB9F58EA64E02732 /* WindKalmanFilter.swift */; };
+		07BF3404C57FD7E1A67372D6 /* RaceStartPollWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA07F20EB962EF18FA311693 /* RaceStartPollWindow.swift */; };
+		0A5E448CC47FECA5E6D3C3ED /* DisplaySettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94346A8C82FEA9FC780E003C /* DisplaySettingsStore.swift */; };
+		0AB9A7689B5DF8F36EAD8087 /* RaceTimerFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9337D98366C94CC253026DC2 /* RaceTimerFormat.swift */; };
+		0C76BD8695D5FD9DBD78CF0C /* SessionAttitudeRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BBCA9DA804C713881BA0E75 /* SessionAttitudeRecorder.swift */; };
+		0EACD2F14220CDCFC358E9EE /* LandscapeCountdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68736C1BEC057F667115196C /* LandscapeCountdownView.swift */; };
+		0F4EA8D739955BA20ED1F70C /* SpliceConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF53ED0251121B723448391E /* SpliceConfig.swift */; };
+		108B888045EC27B817FA18CD /* DisplayTierPickerSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCEC36E988B941694553C6C6 /* DisplayTierPickerSection.swift */; };
+		10AA5BA9F2AE79DD10CFC89A /* MockMotionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 744F1D3BAC88AD7F20E0CF3B /* MockMotionService.swift */; };
+		1318F503ECF9EB09F6F16561 /* PortraitRaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEDDC3C2B45E6279223FAE52 /* PortraitRaceView.swift */; };
+		16775FA232917321125C1EBF /* LandscapeShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4F43A25EB8329215BF38C4F /* LandscapeShellView.swift */; };
+		16A1F57899484D01365C74FA /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 232FE38963D7DEE7D70D5AF0 /* Models.swift */; };
+		1780FE879E6BD32E1D1792F6 /* LandscapeHeadingHeelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32FD62212AD2624AAE7E5F57 /* LandscapeHeadingHeelView.swift */; };
+		195E52BF436D651BA051EDF1 /* SpliceAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14F17967E19D5359A37BA223 /* SpliceAuthService.swift */; };
+		1ED2696D73A0549BC41A4B32 /* PortraitActivityEndSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B8819D753E72CD234EA6818 /* PortraitActivityEndSheet.swift */; };
+		20D129F89350B5D286822935 /* SplicePhoneApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 876EF90AA65A7D010573E17E /* SplicePhoneApp.swift */; };
+		27353D728C81A3FC2B3734FA /* WindEstimationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1BFBDA85F699BAE83C4470D /* WindEstimationViewModel.swift */; };
+		2BF97ACE0CDA78EBF7EEA2EA /* PostRaceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 570384BBF6524CC71BC40FA7 /* PostRaceModels.swift */; };
+		3139FCB3FE9E8C7ACEAA9C5E /* SpliceAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06F477B32A6E4105C3B77DC0 /* SpliceAPIClient.swift */; };
+		316C33A243C7E45DAA8B0692 /* HeelBarLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 322438DF75A65F96A9C8E027 /* HeelBarLayoutTests.swift */; };
+		33AF37206440A028CCA1AACF /* LandscapeCompassTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5B9E587E06572347BB4C2A0 /* LandscapeCompassTests.swift */; };
+		37CB21E174DABFD550DDA670 /* LandscapeCompassView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91A27F38BBD22BF91352031 /* LandscapeCompassView.swift */; };
+		3A92D8F3A9F84CC3284C7978 /* TurnRateFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DE5CCFEC944B71E64A553E3 /* TurnRateFilterTests.swift */; };
+		409DBF0F174501E989EBF663 /* PortraitResultsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6341582E9AE163A0B39946A8 /* PortraitResultsView.swift */; };
+		4255E7ED170C6318DCF47C45 /* MotionConnectable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98DD2E0B4F3A3EFDF28C9BE6 /* MotionConnectable.swift */; };
+		4480BB73AE2743AC93F41C65 /* ConnectIQDeviceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD2EE76EA536104B8938DABF /* ConnectIQDeviceStore.swift */; };
+		45DCFC0772303C601BEB45FB /* OnWaterSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FB5FEFBF8C1984D762DDD61 /* OnWaterSession.swift */; };
+		4725376C13AFF320ABF3F4E3 /* TrimBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD7C54B2732215ADC41ED797 /* TrimBarView.swift */; };
+		49ABB6A1708876230E53B0C7 /* LegAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B154DB90CC00818F79E06BC /* LegAnalyzer.swift */; };
+		4AC4E4783546BD3A1FF41AC6 /* SpliceAPIDiagnostic.swift in Sources */ = {isa = PBXBuildFile; fileRef = 178245C3937008937BF4BA14 /* SpliceAPIDiagnostic.swift */; };
+		4B51A80ED016121083FE2CEA /* PortraitSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A110E92646AD501E9DB359D /* PortraitSetupView.swift */; };
+		4BDD8F955526B673134F35A1 /* GarminCIQService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 815DDA9E291E06DF75603CBD /* GarminCIQService.swift */; };
+		4C940E68F0153571A05DD4A5 /* PostRaceViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FB58742CB22797524FDC9E3 /* PostRaceViewModel.swift */; };
+		50C0F84DA447B2C31563268D /* RaceDayModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1381F119007983F640F660D4 /* RaceDayModels.swift */; };
+		51CA18DF18074BD74A090C64 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F046EDEACA5D841811B3EAD9 /* ContentView.swift */; };
+		542B7784BC5ABEB925CB4F7D /* MotionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72786436DFCB5277F74C17F6 /* MotionService.swift */; };
+		5BF6BA4C103DEA34B9BF4039 /* ZeroOffsetButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3474842F5BDF3C2F6A9352C /* ZeroOffsetButton.swift */; };
+		5EBADEF373A37AE1423000E4 /* RaceTimerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A66095140EC33682A2DD957 /* RaceTimerViewModel.swift */; };
+		5F33788D8F0DF3B0DC3BF3C5 /* OnWaterSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FECDC4067BB230633DA55AD /* OnWaterSessionStore.swift */; };
+		6272D18B5ED7664E3139D504 /* HeelBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4736EA4FC42427B95BEF0DB /* HeelBarView.swift */; };
+		68BD510AA2CA51D584EE1CE4 /* WindEstimationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6958A9890CB3EAF16CA02F01 /* WindEstimationTests.swift */; };
+		70020D8EEDD99FB6A1A116E8 /* ConnectIQ in Frameworks */ = {isa = PBXBuildFile; productRef = 475F24CF40D7879F0F8F898B /* ConnectIQ */; };
+		7935DFC3E7AF62445F7CE01D /* LandscapeSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF7645A8F57304C918AF2731 /* LandscapeSettingsSheet.swift */; };
+		7D1BB6621F65DA1BADA606CC /* TackDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDF98B22C7AAE14187465A27 /* TackDetector.swift */; };
+		7EE9E5FFFA146E1F6068D600 /* SpliceSecrets.plist in Resources */ = {isa = PBXBuildFile; fileRef = 49CBCE633B3EE5393CBEBA73 /* SpliceSecrets.plist */; };
+		7EEA0880E9B4630058F8D085 /* AppShellViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C90230CEEB8D4006EB8C277 /* AppShellViewModel.swift */; };
+		863B8B3169872ECE993BB9DD /* RaceTimer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584D5B44D8E2A6AEEE755844 /* RaceTimer.swift */; };
+		871F95455A20AB6B5D612317 /* ClubTimeFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E802ABBCF5A76C72964DE01 /* ClubTimeFormat.swift */; };
+		8B5DF73CE7911B0D6B87FE30 /* SpliceAuthConnectable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C0BD734965A19D1C12F3637 /* SpliceAuthConnectable.swift */; };
+		8D16597007923757A3F26F5B /* PortraitAnalysisView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC36D2C85A1CEEAA898A3F6D /* PortraitAnalysisView.swift */; };
+		97C63100E59FB7799E8C1059 /* SailingConditionsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF293CABCF371841D62229C2 /* SailingConditionsSection.swift */; };
+		9A4A5A3F697D7A41A358ED64 /* TrackUploadService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28A5B00A35DA5075113EF28F /* TrackUploadService.swift */; };
+		9C149C9155E0E69399A3A3B0 /* HeadingNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E62BE1DA2F545A91AC73AE6 /* HeadingNormalizer.swift */; };
+		9C1DBD03226A3AF4352B2507 /* ConnectIQAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27FD35F5013A166D2CB5505C /* ConnectIQAppDelegate.swift */; };
+		9E32A0A47F831A27A6863592 /* MockGarminCIQService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ABA4B0960B6EB333243A72C /* MockGarminCIQService.swift */; };
+		A10D64016D313B6DB68C4747 /* PortraitFleetCompareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D742ECF6CA3747B7345424F /* PortraitFleetCompareView.swift */; };
+		A2BB70C0FB6ABD2F09241420 /* AttitudeZeroStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1831F10DB9BCA23CB330F363 /* AttitudeZeroStore.swift */; };
+		A43FC6A7A9010466F4B778A8 /* WatchInboundMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1C17FFCFA7B792281EEBF83 /* WatchInboundMessage.swift */; };
+		A49CE9BA3F7464BB9674A778 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C6BF3403A459E687E7C6213C /* Assets.xcassets */; };
+		A5F50B925F78D0E6389FDB2C /* SessionRecordingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB0799614E94D48EF5B78AB /* SessionRecordingService.swift */; };
+		A62F3E1A716231DE9E13AB71 /* RaceTimerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0567BF4AB7908A565CACB70A /* RaceTimerTests.swift */; };
+		A77768D816C079ED325B73DC /* GarminCIQConnectable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DD788DEEA57A37E6FC5ACB2 /* GarminCIQConnectable.swift */; };
+		A792401EB983EB1E2C9618D5 /* LandscapeTrimTurnView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E39E9296A941F1E9A4B63656 /* LandscapeTrimTurnView.swift */; };
+		AA03D82B2F0D30364ADEB8BE /* WindEstimationSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 494FAD2489BD61A4E2BB7F2E /* WindEstimationSettings.swift */; };
+		AF06CB4F0E202586ECE6D23C /* PortraitAnalysisDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 259F2A83F3661EF3B38DCE47 /* PortraitAnalysisDetailView.swift */; };
+		B6F4B90EAB5ABA2EB3D8A9AF /* TurnRateFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAEBA440E08CB5D7F6D0DE06 /* TurnRateFilter.swift */; };
+		B97865089B9CA8631A9E991A /* WindEstimationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FDD0941598312CFD09B7D3B /* WindEstimationEngine.swift */; };
+		BB22190481F5AFF06917BA0A /* AttitudeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2051B53EFE5BF0D1417474B9 /* AttitudeViewModel.swift */; };
+		C1AC8AFD717F5A7D1BAB37B4 /* CircularHeading.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB72620A319E2399EA701443 /* CircularHeading.swift */; };
+		C9273BE74D3650FA916E77A3 /* TurnRateDialView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A120178A000ECAE47610C64 /* TurnRateDialView.swift */; };
+		CA0C90F513646D631F8AC705 /* AttitudePublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 330613558439A63F64438AE4 /* AttitudePublisher.swift */; };
+		CDDD0D53E00CF4C52FD26F3B /* UserDefaultsAuthLocalStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCAE950B5D01D880398D1147 /* UserDefaultsAuthLocalStorage.swift */; };
+		D4B985BA8C2629A119F2B6DA /* LandscapeTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84B885C4BBC8D6F32751740C /* LandscapeTheme.swift */; };
+		E0FE1AB423F20F1D8B1B2FB7 /* RaceTimerFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D859B146C75B59239D8EE2AB /* RaceTimerFormatTests.swift */; };
+		ECE66CA253CDCD4D8E2C32B4 /* PhoneLinkState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B68A5B159F03CD31E0B71D4 /* PhoneLinkState.swift */; };
+		ED29C8AE5BB53BBECE2D0308 /* MockSpliceAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 630A0110C388A26BE570F47C /* MockSpliceAuthService.swift */; };
+		EEAD8F7AE72D28D051A21D13 /* LandscapeSogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A4380C5A1B6BB2F9DC6BCB1 /* LandscapeSogView.swift */; };
+		F129464AECFA6973634B119D /* HeelRangeTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B25A99C390D110AEE2CB293 /* HeelRangeTracker.swift */; };
+		F25B78EFD36398E2AF5CE7E6 /* ConnectIQConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8535AAD994DD3CEDA0CFFB5 /* ConnectIQConstants.swift */; };
+		F44B36B30F4B88FEC9E625A4 /* RaceDayViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F39ACE29599DA2DB65E2DC79 /* RaceDayViewModel.swift */; };
+		F77669528010A1146BD9ED25 /* DisplaySettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01C8CE48A6539A471ADF007E /* DisplaySettingsViewModel.swift */; };
+		F82F86D2DFC0446B54A63DF6 /* LandscapeCompass.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20256F529542B20AD0B11FC /* LandscapeCompass.swift */; };
+		F901CD2BFCC954553294F188 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = B1DBA5F30D3025A8325C0239 /* Supabase */; };
+		FF95CCAAA9236861DFC491A2 /* PortraitSignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D8015517BFAB4C25A1CC98F /* PortraitSignInView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		BEA73FF79F6F5A8149ADBDB6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D0E3572EFFCD10F1C53FF45B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 978E0DB42D1DD7C4B236425C;
+			remoteInfo = SplicePhone;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		01C8CE48A6539A471ADF007E /* DisplaySettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplaySettingsViewModel.swift; sourceTree = "<group>"; };
+		0567BF4AB7908A565CACB70A /* RaceTimerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaceTimerTests.swift; sourceTree = "<group>"; };
+		06F477B32A6E4105C3B77DC0 /* SpliceAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpliceAPIClient.swift; sourceTree = "<group>"; };
+		0B154DB90CC00818F79E06BC /* LegAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegAnalyzer.swift; sourceTree = "<group>"; };
+		1381F119007983F640F660D4 /* RaceDayModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaceDayModels.swift; sourceTree = "<group>"; };
+		14F17967E19D5359A37BA223 /* SpliceAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpliceAuthService.swift; sourceTree = "<group>"; };
+		178245C3937008937BF4BA14 /* SpliceAPIDiagnostic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpliceAPIDiagnostic.swift; sourceTree = "<group>"; };
+		1831F10DB9BCA23CB330F363 /* AttitudeZeroStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttitudeZeroStore.swift; sourceTree = "<group>"; };
+		1A4380C5A1B6BB2F9DC6BCB1 /* LandscapeSogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandscapeSogView.swift; sourceTree = "<group>"; };
+		2051B53EFE5BF0D1417474B9 /* AttitudeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttitudeViewModel.swift; sourceTree = "<group>"; };
+		232FE38963D7DEE7D70D5AF0 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		255D3D1CAB9F58EA64E02732 /* WindKalmanFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindKalmanFilter.swift; sourceTree = "<group>"; };
+		259F2A83F3661EF3B38DCE47 /* PortraitAnalysisDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortraitAnalysisDetailView.swift; sourceTree = "<group>"; };
+		27FD35F5013A166D2CB5505C /* ConnectIQAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectIQAppDelegate.swift; sourceTree = "<group>"; };
+		28A5B00A35DA5075113EF28F /* TrackUploadService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackUploadService.swift; sourceTree = "<group>"; };
+		2A120178A000ECAE47610C64 /* TurnRateDialView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurnRateDialView.swift; sourceTree = "<group>"; };
+		2B25A99C390D110AEE2CB293 /* HeelRangeTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeelRangeTracker.swift; sourceTree = "<group>"; };
+		2C0BD734965A19D1C12F3637 /* SpliceAuthConnectable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpliceAuthConnectable.swift; sourceTree = "<group>"; };
+		2E802ABBCF5A76C72964DE01 /* ClubTimeFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClubTimeFormat.swift; sourceTree = "<group>"; };
+		322438DF75A65F96A9C8E027 /* HeelBarLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeelBarLayoutTests.swift; sourceTree = "<group>"; };
+		32FD62212AD2624AAE7E5F57 /* LandscapeHeadingHeelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandscapeHeadingHeelView.swift; sourceTree = "<group>"; };
+		330613558439A63F64438AE4 /* AttitudePublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttitudePublisher.swift; sourceTree = "<group>"; };
+		3ABA4B0960B6EB333243A72C /* MockGarminCIQService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockGarminCIQService.swift; sourceTree = "<group>"; };
+		3B68A5B159F03CD31E0B71D4 /* PhoneLinkState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneLinkState.swift; sourceTree = "<group>"; };
+		3D742ECF6CA3747B7345424F /* PortraitFleetCompareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortraitFleetCompareView.swift; sourceTree = "<group>"; };
+		494FAD2489BD61A4E2BB7F2E /* WindEstimationSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindEstimationSettings.swift; sourceTree = "<group>"; };
+		49CBCE633B3EE5393CBEBA73 /* SpliceSecrets.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = SpliceSecrets.plist; sourceTree = "<group>"; };
+		4DD788DEEA57A37E6FC5ACB2 /* GarminCIQConnectable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GarminCIQConnectable.swift; sourceTree = "<group>"; };
+		570384BBF6524CC71BC40FA7 /* PostRaceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostRaceModels.swift; sourceTree = "<group>"; };
+		584D5B44D8E2A6AEEE755844 /* RaceTimer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaceTimer.swift; sourceTree = "<group>"; };
+		5BBCA9DA804C713881BA0E75 /* SessionAttitudeRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAttitudeRecorder.swift; sourceTree = "<group>"; };
+		5FECDC4067BB230633DA55AD /* OnWaterSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnWaterSessionStore.swift; sourceTree = "<group>"; };
+		630A0110C388A26BE570F47C /* MockSpliceAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockSpliceAuthService.swift; sourceTree = "<group>"; };
+		6341582E9AE163A0B39946A8 /* PortraitResultsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortraitResultsView.swift; sourceTree = "<group>"; };
+		68736C1BEC057F667115196C /* LandscapeCountdownView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandscapeCountdownView.swift; sourceTree = "<group>"; };
+		6958A9890CB3EAF16CA02F01 /* WindEstimationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindEstimationTests.swift; sourceTree = "<group>"; };
+		6DE5CCFEC944B71E64A553E3 /* TurnRateFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurnRateFilterTests.swift; sourceTree = "<group>"; };
+		6E62BE1DA2F545A91AC73AE6 /* HeadingNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadingNormalizer.swift; sourceTree = "<group>"; };
+		6FB58742CB22797524FDC9E3 /* PostRaceViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostRaceViewModel.swift; sourceTree = "<group>"; };
+		72786436DFCB5277F74C17F6 /* MotionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionService.swift; sourceTree = "<group>"; };
+		744F1D3BAC88AD7F20E0CF3B /* MockMotionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockMotionService.swift; sourceTree = "<group>"; };
+		77685C8F31C0C6DDEEE89D01 /* SplicePhone.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SplicePhone.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7C90230CEEB8D4006EB8C277 /* AppShellViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellViewModel.swift; sourceTree = "<group>"; };
+		815DDA9E291E06DF75603CBD /* GarminCIQService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GarminCIQService.swift; sourceTree = "<group>"; };
+		84B885C4BBC8D6F32751740C /* LandscapeTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandscapeTheme.swift; sourceTree = "<group>"; };
+		876EF90AA65A7D010573E17E /* SplicePhoneApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplicePhoneApp.swift; sourceTree = "<group>"; };
+		8B8819D753E72CD234EA6818 /* PortraitActivityEndSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortraitActivityEndSheet.swift; sourceTree = "<group>"; };
+		8FDD0941598312CFD09B7D3B /* WindEstimationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindEstimationEngine.swift; sourceTree = "<group>"; };
+		9337D98366C94CC253026DC2 /* RaceTimerFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaceTimerFormat.swift; sourceTree = "<group>"; };
+		94346A8C82FEA9FC780E003C /* DisplaySettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplaySettingsStore.swift; sourceTree = "<group>"; };
+		98DD2E0B4F3A3EFDF28C9BE6 /* MotionConnectable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionConnectable.swift; sourceTree = "<group>"; };
+		9A110E92646AD501E9DB359D /* PortraitSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortraitSetupView.swift; sourceTree = "<group>"; };
+		9A66095140EC33682A2DD957 /* RaceTimerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaceTimerViewModel.swift; sourceTree = "<group>"; };
+		9D8015517BFAB4C25A1CC98F /* PortraitSignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortraitSignInView.swift; sourceTree = "<group>"; };
+		9FB5FEFBF8C1984D762DDD61 /* OnWaterSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnWaterSession.swift; sourceTree = "<group>"; };
+		A20256F529542B20AD0B11FC /* LandscapeCompass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandscapeCompass.swift; sourceTree = "<group>"; };
+		AA07F20EB962EF18FA311693 /* RaceStartPollWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaceStartPollWindow.swift; sourceTree = "<group>"; };
+		B0D44C3379827D302EAEEBD4 /* SplicePhoneTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = SplicePhoneTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		BAEBA440E08CB5D7F6D0DE06 /* TurnRateFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurnRateFilter.swift; sourceTree = "<group>"; };
+		BB72620A319E2399EA701443 /* CircularHeading.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CircularHeading.swift; sourceTree = "<group>"; };
+		BCEC36E988B941694553C6C6 /* DisplayTierPickerSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayTierPickerSection.swift; sourceTree = "<group>"; };
+		C6BF3403A459E687E7C6213C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		CD7C54B2732215ADC41ED797 /* TrimBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrimBarView.swift; sourceTree = "<group>"; };
+		CF53ED0251121B723448391E /* SpliceConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpliceConfig.swift; sourceTree = "<group>"; };
+		D1BFBDA85F699BAE83C4470D /* WindEstimationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindEstimationViewModel.swift; sourceTree = "<group>"; };
+		D1C17FFCFA7B792281EEBF83 /* WatchInboundMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchInboundMessage.swift; sourceTree = "<group>"; };
+		D4736EA4FC42427B95BEF0DB /* HeelBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeelBarView.swift; sourceTree = "<group>"; };
+		D859B146C75B59239D8EE2AB /* RaceTimerFormatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaceTimerFormatTests.swift; sourceTree = "<group>"; };
+		DC36D2C85A1CEEAA898A3F6D /* PortraitAnalysisView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortraitAnalysisView.swift; sourceTree = "<group>"; };
+		DD2EE76EA536104B8938DABF /* ConnectIQDeviceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectIQDeviceStore.swift; sourceTree = "<group>"; };
+		DF7645A8F57304C918AF2731 /* LandscapeSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandscapeSettingsSheet.swift; sourceTree = "<group>"; };
+		E3474842F5BDF3C2F6A9352C /* ZeroOffsetButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZeroOffsetButton.swift; sourceTree = "<group>"; };
+		E39E9296A941F1E9A4B63656 /* LandscapeTrimTurnView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandscapeTrimTurnView.swift; sourceTree = "<group>"; };
+		E5B9E587E06572347BB4C2A0 /* LandscapeCompassTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandscapeCompassTests.swift; sourceTree = "<group>"; };
+		E91A27F38BBD22BF91352031 /* LandscapeCompassView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandscapeCompassView.swift; sourceTree = "<group>"; };
+		ED2CB3B7DAAAC2262F00108E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		EDF98B22C7AAE14187465A27 /* TackDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TackDetector.swift; sourceTree = "<group>"; };
+		EEDDC3C2B45E6279223FAE52 /* PortraitRaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortraitRaceView.swift; sourceTree = "<group>"; };
+		EF293CABCF371841D62229C2 /* SailingConditionsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SailingConditionsSection.swift; sourceTree = "<group>"; };
+		F046EDEACA5D841811B3EAD9 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		F39ACE29599DA2DB65E2DC79 /* RaceDayViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaceDayViewModel.swift; sourceTree = "<group>"; };
+		F4F43A25EB8329215BF38C4F /* LandscapeShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandscapeShellView.swift; sourceTree = "<group>"; };
+		F8535AAD994DD3CEDA0CFFB5 /* ConnectIQConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectIQConstants.swift; sourceTree = "<group>"; };
+		FAB0799614E94D48EF5B78AB /* SessionRecordingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionRecordingService.swift; sourceTree = "<group>"; };
+		FCAE950B5D01D880398D1147 /* UserDefaultsAuthLocalStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDefaultsAuthLocalStorage.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		6C0E6AC824AF4E39F420B99E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				70020D8EEDD99FB6A1A116E8 /* ConnectIQ in Frameworks */,
+				F901CD2BFCC954553294F188 /* Supabase in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		18ADB3B010F0799D61E446A9 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				232FE38963D7DEE7D70D5AF0 /* Models.swift */,
+				9FB5FEFBF8C1984D762DDD61 /* OnWaterSession.swift */,
+				3B68A5B159F03CD31E0B71D4 /* PhoneLinkState.swift */,
+				570384BBF6524CC71BC40FA7 /* PostRaceModels.swift */,
+				1381F119007983F640F660D4 /* RaceDayModels.swift */,
+				D1C17FFCFA7B792281EEBF83 /* WatchInboundMessage.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		2573CD610F25B6BFAA5565CA /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				77685C8F31C0C6DDEEE89D01 /* SplicePhone.app */,
+				B0D44C3379827D302EAEEBD4 /* SplicePhoneTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		386E13D3642199BC1CC8BDD8 /* Domain */ = {
+			isa = PBXGroup;
+			children = (
+				330613558439A63F64438AE4 /* AttitudePublisher.swift */,
+				6E62BE1DA2F545A91AC73AE6 /* HeadingNormalizer.swift */,
+				2B25A99C390D110AEE2CB293 /* HeelRangeTracker.swift */,
+				A20256F529542B20AD0B11FC /* LandscapeCompass.swift */,
+				584D5B44D8E2A6AEEE755844 /* RaceTimer.swift */,
+				9337D98366C94CC253026DC2 /* RaceTimerFormat.swift */,
+				BAEBA440E08CB5D7F6D0DE06 /* TurnRateFilter.swift */,
+				DEBD742180E0199E70C50893 /* WindEstimation */,
+			);
+			path = Domain;
+			sourceTree = "<group>";
+		};
+		437B0A6255E8B3FE5C919DFE /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				DD2EE76EA536104B8938DABF /* ConnectIQDeviceStore.swift */,
+				4DD788DEEA57A37E6FC5ACB2 /* GarminCIQConnectable.swift */,
+				815DDA9E291E06DF75603CBD /* GarminCIQService.swift */,
+				3ABA4B0960B6EB333243A72C /* MockGarminCIQService.swift */,
+				744F1D3BAC88AD7F20E0CF3B /* MockMotionService.swift */,
+				630A0110C388A26BE570F47C /* MockSpliceAuthService.swift */,
+				98DD2E0B4F3A3EFDF28C9BE6 /* MotionConnectable.swift */,
+				72786436DFCB5277F74C17F6 /* MotionService.swift */,
+				5FECDC4067BB230633DA55AD /* OnWaterSessionStore.swift */,
+				5BBCA9DA804C713881BA0E75 /* SessionAttitudeRecorder.swift */,
+				FAB0799614E94D48EF5B78AB /* SessionRecordingService.swift */,
+				06F477B32A6E4105C3B77DC0 /* SpliceAPIClient.swift */,
+				2C0BD734965A19D1C12F3637 /* SpliceAuthConnectable.swift */,
+				14F17967E19D5359A37BA223 /* SpliceAuthService.swift */,
+				28A5B00A35DA5075113EF28F /* TrackUploadService.swift */,
+				FCAE950B5D01D880398D1147 /* UserDefaultsAuthLocalStorage.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		4430791FB011D15A09B7E5FC /* Utils */ = {
+			isa = PBXGroup;
+			children = (
+				1831F10DB9BCA23CB330F363 /* AttitudeZeroStore.swift */,
+				2E802ABBCF5A76C72964DE01 /* ClubTimeFormat.swift */,
+				F8535AAD994DD3CEDA0CFFB5 /* ConnectIQConstants.swift */,
+				94346A8C82FEA9FC780E003C /* DisplaySettingsStore.swift */,
+				84B885C4BBC8D6F32751740C /* LandscapeTheme.swift */,
+				AA07F20EB962EF18FA311693 /* RaceStartPollWindow.swift */,
+				178245C3937008937BF4BA14 /* SpliceAPIDiagnostic.swift */,
+				CF53ED0251121B723448391E /* SpliceConfig.swift */,
+			);
+			path = Utils;
+			sourceTree = "<group>";
+		};
+		559A25FF1B483D64AB189B56 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				322438DF75A65F96A9C8E027 /* HeelBarLayoutTests.swift */,
+				E5B9E587E06572347BB4C2A0 /* LandscapeCompassTests.swift */,
+				D859B146C75B59239D8EE2AB /* RaceTimerFormatTests.swift */,
+				0567BF4AB7908A565CACB70A /* RaceTimerTests.swift */,
+				6DE5CCFEC944B71E64A553E3 /* TurnRateFilterTests.swift */,
+				6958A9890CB3EAF16CA02F01 /* WindEstimationTests.swift */,
+			);
+			name = Tests;
+			path = SplicePhone/Tests;
+			sourceTree = "<group>";
+		};
+		6ECD598826A25B45DD280CEA = {
+			isa = PBXGroup;
+			children = (
+				834564BF473C5FD303008532 /* SplicePhone */,
+				559A25FF1B483D64AB189B56 /* Tests */,
+				2573CD610F25B6BFAA5565CA /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		7958AE5F25CF9A9F1227EC9D /* App */ = {
+			isa = PBXGroup;
+			children = (
+				27FD35F5013A166D2CB5505C /* ConnectIQAppDelegate.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		834564BF473C5FD303008532 /* SplicePhone */ = {
+			isa = PBXGroup;
+			children = (
+				C6BF3403A459E687E7C6213C /* Assets.xcassets */,
+				ED2CB3B7DAAAC2262F00108E /* Info.plist */,
+				876EF90AA65A7D010573E17E /* SplicePhoneApp.swift */,
+				7958AE5F25CF9A9F1227EC9D /* App */,
+				F35BDEBD63A569ABAAD2C825 /* Config */,
+				386E13D3642199BC1CC8BDD8 /* Domain */,
+				18ADB3B010F0799D61E446A9 /* Models */,
+				437B0A6255E8B3FE5C919DFE /* Services */,
+				4430791FB011D15A09B7E5FC /* Utils */,
+				FD878823D676D748E3B084B1 /* ViewModels */,
+				BB89553E834F0BA5C94E895C /* Views */,
+			);
+			path = SplicePhone;
+			sourceTree = "<group>";
+		};
+		BB89553E834F0BA5C94E895C /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				F046EDEACA5D841811B3EAD9 /* ContentView.swift */,
+				BCEC36E988B941694553C6C6 /* DisplayTierPickerSection.swift */,
+				D4736EA4FC42427B95BEF0DB /* HeelBarView.swift */,
+				E91A27F38BBD22BF91352031 /* LandscapeCompassView.swift */,
+				68736C1BEC057F667115196C /* LandscapeCountdownView.swift */,
+				32FD62212AD2624AAE7E5F57 /* LandscapeHeadingHeelView.swift */,
+				DF7645A8F57304C918AF2731 /* LandscapeSettingsSheet.swift */,
+				F4F43A25EB8329215BF38C4F /* LandscapeShellView.swift */,
+				1A4380C5A1B6BB2F9DC6BCB1 /* LandscapeSogView.swift */,
+				E39E9296A941F1E9A4B63656 /* LandscapeTrimTurnView.swift */,
+				8B8819D753E72CD234EA6818 /* PortraitActivityEndSheet.swift */,
+				259F2A83F3661EF3B38DCE47 /* PortraitAnalysisDetailView.swift */,
+				DC36D2C85A1CEEAA898A3F6D /* PortraitAnalysisView.swift */,
+				3D742ECF6CA3747B7345424F /* PortraitFleetCompareView.swift */,
+				EEDDC3C2B45E6279223FAE52 /* PortraitRaceView.swift */,
+				6341582E9AE163A0B39946A8 /* PortraitResultsView.swift */,
+				9A110E92646AD501E9DB359D /* PortraitSetupView.swift */,
+				9D8015517BFAB4C25A1CC98F /* PortraitSignInView.swift */,
+				EF293CABCF371841D62229C2 /* SailingConditionsSection.swift */,
+				CD7C54B2732215ADC41ED797 /* TrimBarView.swift */,
+				2A120178A000ECAE47610C64 /* TurnRateDialView.swift */,
+				E3474842F5BDF3C2F6A9352C /* ZeroOffsetButton.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		DEBD742180E0199E70C50893 /* WindEstimation */ = {
+			isa = PBXGroup;
+			children = (
+				BB72620A319E2399EA701443 /* CircularHeading.swift */,
+				0B154DB90CC00818F79E06BC /* LegAnalyzer.swift */,
+				EDF98B22C7AAE14187465A27 /* TackDetector.swift */,
+				8FDD0941598312CFD09B7D3B /* WindEstimationEngine.swift */,
+				494FAD2489BD61A4E2BB7F2E /* WindEstimationSettings.swift */,
+				255D3D1CAB9F58EA64E02732 /* WindKalmanFilter.swift */,
+			);
+			path = WindEstimation;
+			sourceTree = "<group>";
+		};
+		F35BDEBD63A569ABAAD2C825 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				49CBCE633B3EE5393CBEBA73 /* SpliceSecrets.plist */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		FD878823D676D748E3B084B1 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				7C90230CEEB8D4006EB8C277 /* AppShellViewModel.swift */,
+				2051B53EFE5BF0D1417474B9 /* AttitudeViewModel.swift */,
+				01C8CE48A6539A471ADF007E /* DisplaySettingsViewModel.swift */,
+				6FB58742CB22797524FDC9E3 /* PostRaceViewModel.swift */,
+				F39ACE29599DA2DB65E2DC79 /* RaceDayViewModel.swift */,
+				9A66095140EC33682A2DD957 /* RaceTimerViewModel.swift */,
+				D1BFBDA85F699BAE83C4470D /* WindEstimationViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		978E0DB42D1DD7C4B236425C /* SplicePhone */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CE166C6A58BADDD4542DB4A3 /* Build configuration list for PBXNativeTarget "SplicePhone" */;
+			buildPhases = (
+				6C7895488FD019BF3058F2D9 /* Sources */,
+				0F8F4BCE54F6B6FAD8E93F45 /* Resources */,
+				6C0E6AC824AF4E39F420B99E /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SplicePhone;
+			packageProductDependencies = (
+				475F24CF40D7879F0F8F898B /* ConnectIQ */,
+				B1DBA5F30D3025A8325C0239 /* Supabase */,
+			);
+			productName = SplicePhone;
+			productReference = 77685C8F31C0C6DDEEE89D01 /* SplicePhone.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E2E41FED8973CDFE4E15DBDB /* SplicePhoneTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 883E4D1B23B064E2475C6D82 /* Build configuration list for PBXNativeTarget "SplicePhoneTests" */;
+			buildPhases = (
+				38D9D9BCB6730AE8106F1F00 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D112A2500099A1243CBC7D0C /* PBXTargetDependency */,
+			);
+			name = SplicePhoneTests;
+			packageProductDependencies = (
+			);
+			productName = SplicePhoneTests;
+			productReference = B0D44C3379827D302EAEEBD4 /* SplicePhoneTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		D0E3572EFFCD10F1C53FF45B /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					E2E41FED8973CDFE4E15DBDB = {
+						DevelopmentTeam = "";
+					};
+				};
+			};
+			buildConfigurationList = 40FA135BB96DA0C5C4D0F261 /* Build configuration list for PBXProject "SplicePhone" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 6ECD598826A25B45DD280CEA;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				0DEB14E024212C46D7900915 /* XCRemoteSwiftPackageReference "connectiq-companion-app-sdk-ios" */,
+				3DD603008D72D9EE75EE2383 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 2573CD610F25B6BFAA5565CA /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				978E0DB42D1DD7C4B236425C /* SplicePhone */,
+				E2E41FED8973CDFE4E15DBDB /* SplicePhoneTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		0F8F4BCE54F6B6FAD8E93F45 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A49CE9BA3F7464BB9674A778 /* Assets.xcassets in Resources */,
+				7EE9E5FFFA146E1F6068D600 /* SpliceSecrets.plist in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		38D9D9BCB6730AE8106F1F00 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				316C33A243C7E45DAA8B0692 /* HeelBarLayoutTests.swift in Sources */,
+				33AF37206440A028CCA1AACF /* LandscapeCompassTests.swift in Sources */,
+				E0FE1AB423F20F1D8B1B2FB7 /* RaceTimerFormatTests.swift in Sources */,
+				A62F3E1A716231DE9E13AB71 /* RaceTimerTests.swift in Sources */,
+				3A92D8F3A9F84CC3284C7978 /* TurnRateFilterTests.swift in Sources */,
+				68BD510AA2CA51D584EE1CE4 /* WindEstimationTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6C7895488FD019BF3058F2D9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7EEA0880E9B4630058F8D085 /* AppShellViewModel.swift in Sources */,
+				CA0C90F513646D631F8AC705 /* AttitudePublisher.swift in Sources */,
+				BB22190481F5AFF06917BA0A /* AttitudeViewModel.swift in Sources */,
+				A2BB70C0FB6ABD2F09241420 /* AttitudeZeroStore.swift in Sources */,
+				C1AC8AFD717F5A7D1BAB37B4 /* CircularHeading.swift in Sources */,
+				871F95455A20AB6B5D612317 /* ClubTimeFormat.swift in Sources */,
+				9C1DBD03226A3AF4352B2507 /* ConnectIQAppDelegate.swift in Sources */,
+				F25B78EFD36398E2AF5CE7E6 /* ConnectIQConstants.swift in Sources */,
+				4480BB73AE2743AC93F41C65 /* ConnectIQDeviceStore.swift in Sources */,
+				51CA18DF18074BD74A090C64 /* ContentView.swift in Sources */,
+				0A5E448CC47FECA5E6D3C3ED /* DisplaySettingsStore.swift in Sources */,
+				F77669528010A1146BD9ED25 /* DisplaySettingsViewModel.swift in Sources */,
+				108B888045EC27B817FA18CD /* DisplayTierPickerSection.swift in Sources */,
+				A77768D816C079ED325B73DC /* GarminCIQConnectable.swift in Sources */,
+				4BDD8F955526B673134F35A1 /* GarminCIQService.swift in Sources */,
+				9C149C9155E0E69399A3A3B0 /* HeadingNormalizer.swift in Sources */,
+				6272D18B5ED7664E3139D504 /* HeelBarView.swift in Sources */,
+				F129464AECFA6973634B119D /* HeelRangeTracker.swift in Sources */,
+				F82F86D2DFC0446B54A63DF6 /* LandscapeCompass.swift in Sources */,
+				37CB21E174DABFD550DDA670 /* LandscapeCompassView.swift in Sources */,
+				0EACD2F14220CDCFC358E9EE /* LandscapeCountdownView.swift in Sources */,
+				1780FE879E6BD32E1D1792F6 /* LandscapeHeadingHeelView.swift in Sources */,
+				7935DFC3E7AF62445F7CE01D /* LandscapeSettingsSheet.swift in Sources */,
+				16775FA232917321125C1EBF /* LandscapeShellView.swift in Sources */,
+				EEAD8F7AE72D28D051A21D13 /* LandscapeSogView.swift in Sources */,
+				D4B985BA8C2629A119F2B6DA /* LandscapeTheme.swift in Sources */,
+				A792401EB983EB1E2C9618D5 /* LandscapeTrimTurnView.swift in Sources */,
+				49ABB6A1708876230E53B0C7 /* LegAnalyzer.swift in Sources */,
+				9E32A0A47F831A27A6863592 /* MockGarminCIQService.swift in Sources */,
+				10AA5BA9F2AE79DD10CFC89A /* MockMotionService.swift in Sources */,
+				ED29C8AE5BB53BBECE2D0308 /* MockSpliceAuthService.swift in Sources */,
+				16A1F57899484D01365C74FA /* Models.swift in Sources */,
+				4255E7ED170C6318DCF47C45 /* MotionConnectable.swift in Sources */,
+				542B7784BC5ABEB925CB4F7D /* MotionService.swift in Sources */,
+				45DCFC0772303C601BEB45FB /* OnWaterSession.swift in Sources */,
+				5F33788D8F0DF3B0DC3BF3C5 /* OnWaterSessionStore.swift in Sources */,
+				ECE66CA253CDCD4D8E2C32B4 /* PhoneLinkState.swift in Sources */,
+				1ED2696D73A0549BC41A4B32 /* PortraitActivityEndSheet.swift in Sources */,
+				AF06CB4F0E202586ECE6D23C /* PortraitAnalysisDetailView.swift in Sources */,
+				8D16597007923757A3F26F5B /* PortraitAnalysisView.swift in Sources */,
+				A10D64016D313B6DB68C4747 /* PortraitFleetCompareView.swift in Sources */,
+				1318F503ECF9EB09F6F16561 /* PortraitRaceView.swift in Sources */,
+				409DBF0F174501E989EBF663 /* PortraitResultsView.swift in Sources */,
+				4B51A80ED016121083FE2CEA /* PortraitSetupView.swift in Sources */,
+				FF95CCAAA9236861DFC491A2 /* PortraitSignInView.swift in Sources */,
+				2BF97ACE0CDA78EBF7EEA2EA /* PostRaceModels.swift in Sources */,
+				4C940E68F0153571A05DD4A5 /* PostRaceViewModel.swift in Sources */,
+				50C0F84DA447B2C31563268D /* RaceDayModels.swift in Sources */,
+				F44B36B30F4B88FEC9E625A4 /* RaceDayViewModel.swift in Sources */,
+				07BF3404C57FD7E1A67372D6 /* RaceStartPollWindow.swift in Sources */,
+				863B8B3169872ECE993BB9DD /* RaceTimer.swift in Sources */,
+				0AB9A7689B5DF8F36EAD8087 /* RaceTimerFormat.swift in Sources */,
+				5EBADEF373A37AE1423000E4 /* RaceTimerViewModel.swift in Sources */,
+				97C63100E59FB7799E8C1059 /* SailingConditionsSection.swift in Sources */,
+				0C76BD8695D5FD9DBD78CF0C /* SessionAttitudeRecorder.swift in Sources */,
+				A5F50B925F78D0E6389FDB2C /* SessionRecordingService.swift in Sources */,
+				3139FCB3FE9E8C7ACEAA9C5E /* SpliceAPIClient.swift in Sources */,
+				4AC4E4783546BD3A1FF41AC6 /* SpliceAPIDiagnostic.swift in Sources */,
+				8B5DF73CE7911B0D6B87FE30 /* SpliceAuthConnectable.swift in Sources */,
+				195E52BF436D651BA051EDF1 /* SpliceAuthService.swift in Sources */,
+				0F4EA8D739955BA20ED1F70C /* SpliceConfig.swift in Sources */,
+				20D129F89350B5D286822935 /* SplicePhoneApp.swift in Sources */,
+				7D1BB6621F65DA1BADA606CC /* TackDetector.swift in Sources */,
+				9A4A5A3F697D7A41A358ED64 /* TrackUploadService.swift in Sources */,
+				4725376C13AFF320ABF3F4E3 /* TrimBarView.swift in Sources */,
+				C9273BE74D3650FA916E77A3 /* TurnRateDialView.swift in Sources */,
+				B6F4B90EAB5ABA2EB3D8A9AF /* TurnRateFilter.swift in Sources */,
+				CDDD0D53E00CF4C52FD26F3B /* UserDefaultsAuthLocalStorage.swift in Sources */,
+				A43FC6A7A9010466F4B778A8 /* WatchInboundMessage.swift in Sources */,
+				B97865089B9CA8631A9E991A /* WindEstimationEngine.swift in Sources */,
+				AA03D82B2F0D30364ADEB8BE /* WindEstimationSettings.swift in Sources */,
+				27353D728C81A3FC2B3734FA /* WindEstimationViewModel.swift in Sources */,
+				008401E303BBF9BC867F8436 /* WindKalmanFilter.swift in Sources */,
+				5BF6BA4C103DEA34B9BF4039 /* ZeroOffsetButton.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D112A2500099A1243CBC7D0C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 978E0DB42D1DD7C4B236425C /* SplicePhone */;
+			targetProxy = BEA73FF79F6F5A8149ADBDB6 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		41340E8B13AD3C5595B4B0FC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.compassbox.splicephone.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SplicePhone.app/SplicePhone";
+			};
+			name = Debug;
+		};
+		4426DE4EACF0C2C3D485F6DB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		4A7111DD033D0576B5801C78 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = PX426A6955;
+				INFOPLIST_FILE = SplicePhone/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Splice;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.compassbox.splicephone;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		6B624C7F1AB559F698415627 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		7F1B6624850066FE80D718A1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = PX426A6955;
+				INFOPLIST_FILE = SplicePhone/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Splice;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.compassbox.splicephone;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		9D2EC11D350FD0C2B93B86E7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.compassbox.splicephone.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SplicePhone.app/SplicePhone";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		40FA135BB96DA0C5C4D0F261 /* Build configuration list for PBXProject "SplicePhone" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6B624C7F1AB559F698415627 /* Debug */,
+				4426DE4EACF0C2C3D485F6DB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		883E4D1B23B064E2475C6D82 /* Build configuration list for PBXNativeTarget "SplicePhoneTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				41340E8B13AD3C5595B4B0FC /* Debug */,
+				9D2EC11D350FD0C2B93B86E7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		CE166C6A58BADDD4542DB4A3 /* Build configuration list for PBXNativeTarget "SplicePhone" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4A7111DD033D0576B5801C78 /* Debug */,
+				7F1B6624850066FE80D718A1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		0DEB14E024212C46D7900915 /* XCRemoteSwiftPackageReference "connectiq-companion-app-sdk-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/garmin/connectiq-companion-app-sdk-ios.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.8.0;
+			};
+		};
+		3DD603008D72D9EE75EE2383 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.29.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		475F24CF40D7879F0F8F898B /* ConnectIQ */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0DEB14E024212C46D7900915 /* XCRemoteSwiftPackageReference "connectiq-companion-app-sdk-ios" */;
+			productName = ConnectIQ;
+		};
+		B1DBA5F30D3025A8325C0239 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3DD603008D72D9EE75EE2383 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = D0E3572EFFCD10F1C53FF45B /* Project object */;
+}

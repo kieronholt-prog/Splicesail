@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<drawables>
+    <bitmap id="LauncherIcon" filename="launcher_icon.png" />
+    <bitmap id="SpliceLogo" filename="splice_logo.png" />
+    <bitmap id="SpliceWordmark" filename="splice_wordmark.png" />
+</drawables>

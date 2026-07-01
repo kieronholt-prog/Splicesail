@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<strings>
+    <string id="AppName">Splice</string>
+    <string id="HeadingLabel">Heading</string>
+    <string id="HeelLabel">Heel</string>
+    <string id="TrimLabel">Trim</string>
+    <string id="TurnLabel">Turn rate</string>
+    <string id="DegreesUnit">deg</string>
+    <string id="TurnUnit">deg/s</string>
+    <string id="CountdownMinutesTitle">Countdown (minutes)</string>
+    <string id="DisplayTierTitle">Display tier</string>
+    <string id="TierCore">Core — Timer &amp; Heading</string>
+    <string id="TierPro">Pro — + SOG</string>
+    <string id="TierProPlus">Pro+ — + VMG &amp; Distance</string>
+    <string id="CountdownSequenceTitle">Countdown sequence</string>
+    <string id="Sequence541">5-4-1-GO</string>
+    <string id="Sequence321">3-2-1-GO</string>
+    <string id="ChooseDeviceTitle">Choose CompassBox…</string>
+    <string id="ForgetDeviceTitle">Forget saved CompassBox</string>
+    <string id="ExpectedTackingAngleTitle">Expected tacking angle (°)</string>
+</strings>

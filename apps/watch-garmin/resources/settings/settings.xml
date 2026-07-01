@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<settings>
+    <setting propertyKey="@Properties.countdownSequence" title="@Strings.CountdownSequenceTitle">
+        <settingConfig type="list">
+            <listEntry value="0">@Strings.Sequence541</listEntry>
+            <listEntry value="1">@Strings.Sequence321</listEntry>
+        </settingConfig>
+    </setting>
+    <setting propertyKey="@Properties.countdownMinutes" title="@Strings.CountdownMinutesTitle">
+        <settingConfig type="numeric" min="1" max="30" />
+    </setting>
+    <setting propertyKey="@Properties.forgetDevice" title="@Strings.ForgetDeviceTitle">
+        <settingConfig type="boolean" />
+    </setting>
+    <setting propertyKey="@Properties.chooseDevice" title="@Strings.ChooseDeviceTitle">
+        <settingConfig type="boolean" />
+    </setting>
+</settings>

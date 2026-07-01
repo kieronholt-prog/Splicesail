@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fitContributions>
+    <fitField
+        id="0"
+        dataLabel="@Strings.HeadingLabel"
+        unitLabel="@Strings.DegreesUnit"
+        sortOrder="0"
+        displayInChart="true"
+        displayInActivitySummary="true"
+        precision="1"
+        chartTitle="@Strings.HeadingLabel" />
+    <fitField
+        id="1"
+        dataLabel="@Strings.HeelLabel"
+        unitLabel="@Strings.DegreesUnit"
+        sortOrder="1"
+        displayInChart="true"
+        displayInActivitySummary="true"
+        precision="1"
+        chartTitle="@Strings.HeelLabel" />
+    <fitField
+        id="2"
+        dataLabel="@Strings.TrimLabel"
+        unitLabel="@Strings.DegreesUnit"
+        sortOrder="2"
+        displayInChart="true"
+        displayInActivitySummary="true"
+        precision="1"
+        chartTitle="@Strings.TrimLabel" />
+    <fitField
+        id="3"
+        dataLabel="@Strings.TurnLabel"
+        unitLabel="@Strings.TurnUnit"
+        sortOrder="3"
+        displayInChart="true"
+        displayInActivitySummary="true"
+        precision="1"
+        chartTitle="@Strings.TurnLabel" />
+</fitContributions>

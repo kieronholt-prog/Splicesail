@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<properties>
+    <property id="countdownMinutes" type="number">5</property>
+    <property id="displayTier" type="number">0</property>
+    <property id="countdownSequence" type="number">0</property>
+    <property id="forgetDevice" type="boolean">false</property>
+    <property id="chooseDevice" type="boolean">false</property>
+</properties>

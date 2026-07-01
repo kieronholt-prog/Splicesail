@@ -43,8 +43,10 @@ next-env.d.ts
 
 # iOS app
 /apps/phone-ios/.derivedData/
+/apps/phone-ios/build/
 /apps/phone-ios/SplicePhone/Config/SpliceSecrets.plist
 /apps/phone-ios/**/*.xcuserstate
+/apps/phone-ios/**/xcuserdata/
 
 # Garmin watch builds
 /apps/watch-garmin/bin/
