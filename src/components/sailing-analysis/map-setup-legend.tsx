@@ -32,6 +32,10 @@ export function MapSetupLegend() {
         <LegendLine color="#ffffff" label="Start / finish line" />
         <LegendLine color={MAP_RND_BISECTOR_LINE} label="Rounding bisectors (when shown)" dashed />
         <p className="pt-1">
+          <span className="inline-block h-2 w-4 rounded-sm bg-cyan-400/40 align-middle" /> Fleet wind grid (50 m · 5 min) ·{" "}
+          <span className="text-white">↓</span> wind flow
+        </p>
+        <p className="pt-1">
           <span className="font-bold text-[#ff6b4a]">T</span> tack ·{" "}
           <span className="font-bold text-[#4adfff]">G</span> gybe ·{" "}
           <span className="text-[#ff4a6a]">P→S</span> / <span className="text-[#4aff8a]">S→P</span> crossing ·{" "}

@@ -5,6 +5,8 @@ import { buildCourseLinePoints, buildMapMarksWithSfEnds } from "@/lib/sailing-an
 import { buildGateOverlayFC, sfLineFromCourseSetup } from "@/lib/sailing-analysis/gate-overlay";
 import { loadTrackPointsForSubmission } from "@/lib/track-points-loader";
 import { resolveCollatedCourseContext } from "@/lib/sailing-analysis/resolve-collated-course-context";
+import { fleetWindGridToGeoJSON, parseFleetWindGrid } from "@/lib/sailing-analysis/fleet-wind-grid";
+import { resolveSubmissionRaceFleetId } from "@/lib/sailing-analysis/race-fleet-analysis-settings";
 import type { AnalysisSnapshot } from "@/lib/sailing-analysis/analysis-types";
 import { getServerAuth } from "@/lib/supabase/auth-cache";
 import { dismissTrackNotificationAction } from "@/app/actions/track-submissions";
@@ -62,6 +64,22 @@ export default async function TrackAnalysisPage({ params, searchParams }: Props)
   const markOverrides = courseCtx.markOverrides;
   const courseSetup = courseCtx.courseSetup;
 
+  let windGridFC: GeoJSON.FeatureCollection | null = null;
+  if (sub.analysis_mode === "collated" && sub.race_id) {
+    const fleetId = await resolveSubmissionRaceFleetId(supabase, sub);
+    if (fleetId) {
+      const { data: fleetSettings } = await supabase
+        .from("race_fleet_analysis_settings")
+        .select("course_setup")
+        .eq("race_fleet_id", fleetId)
+        .maybeSingle();
+      const grid = parseFleetWindGrid(
+        (fleetSettings?.course_setup as Record<string, unknown> | undefined)?.fleetWindGrid,
+      );
+      if (grid) windGridFC = fleetWindGridToGeoJSON(grid);
+    }
+  }
+
   let collatedPeers: { id: string; activity_name: string | null }[] = [];
   if (sub.analysis_mode === "collated" && sub.race_id) {
     const { data: peers } = await supabase
@@ -115,6 +133,7 @@ export default async function TrackAnalysisPage({ params, searchParams }: Props)
             initialCourseSetup={courseSetup}
             trackPoints={trackPoints}
             collatedPreset={sub.analysis_mode === "collated"}
+            windGridFC={windGridFC}
           />
         </div>
 

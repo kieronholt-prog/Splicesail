@@ -12,6 +12,8 @@ import {
 import type { RaceFleetAnalysisSettingsRow } from "@/lib/sailing-analysis/race-fleet-analysis-settings";
 import { resolveSubmissionRaceFleetId } from "@/lib/sailing-analysis/race-fleet-analysis-settings";
 import { loadTrackPointsForSubmission } from "@/lib/track-points-loader";
+import { buildFleetWindGrid } from "./fleet-wind-grid";
+import { persistFleetWindGrid } from "./persist-fleet-wind-grid";
 
 type SubmissionRow = {
   id: string;
@@ -58,6 +60,7 @@ export async function runCollatedAnalysisForFleet(
 
   let analysed = 0;
   let skipped = 0;
+  const snapshotsForWindGrid: { submissionId: string; snapshot: Record<string, unknown> }[] = [];
 
   for (const sub of submissions) {
     const subFleetId = await resolveSubmissionRaceFleetId(supabase, sub);
@@ -120,8 +123,18 @@ export async function runCollatedAnalysisForFleet(
       })
       .eq("id", sub.id);
 
+    snapshotsForWindGrid.push({ submissionId: sub.id, snapshot: results as Record<string, unknown> });
     analysed++;
   }
+
+  const windGrid = buildFleetWindGrid(
+    snapshotsForWindGrid.map((s) => ({
+      submissionId: s.submissionId,
+      snapshot: s.snapshot as never,
+    })),
+    settings.wind_direction ?? Number(snapshotsForWindGrid[0]?.snapshot?.windDir) ?? 0,
+  );
+  await persistFleetWindGrid(supabase, raceFleetId, windGrid);
 
   await supabase
     .from("race_fleet_analysis_settings")

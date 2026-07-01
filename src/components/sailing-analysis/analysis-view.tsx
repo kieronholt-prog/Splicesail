@@ -24,6 +24,7 @@ export function AnalysisView({
   startFinishLine,
   legGatesFC,
   showMarkGates = false,
+  windGridFC = null,
   windOverride,
   onWindOverrideChange,
   editableWind = false,
@@ -36,6 +37,7 @@ export function AnalysisView({
   startFinishLine?: StartFinishLineEnds | null;
   legGatesFC?: GeoJSON.FeatureCollection | { type: string; features: unknown[] } | null;
   showMarkGates?: boolean;
+  windGridFC?: GeoJSON.FeatureCollection | { type: string; features: unknown[] } | null;
   windOverride?: number | null;
   onWindOverrideChange?: (deg: number) => void;
   editableWind?: boolean;
@@ -62,6 +64,7 @@ export function AnalysisView({
 
   const racingTacks = useMemo(() => tacks.filter((t) => !t.excludeFromStatsAndVMG), [tacks]);
   const racingGybes = useMemo(() => gybes.filter((g) => !g.excludeFromStatsAndVMG), [gybes]);
+  const [showWindGrid, setShowWindGrid] = useState(true);
 
   return (
     <div className="flex flex-col gap-6">
@@ -108,18 +111,33 @@ export function AnalysisView({
       ) : null}
 
       {tab === "map" ? (
-        <CourseAnalysisMap
-          marks={mapMarks ?? {}}
-          trackPoints={points}
-          courseLine={courseLine}
-          draggableAllMarks={false}
-          startFinishLine={startFinishLine ?? null}
-          trackSegmentFC={snapshot.trackSegmentFC ?? null}
-          legGatesFC={legGatesFC ?? null}
-          showMarkGates={showMarkGates}
-          manoeuvres={{ tacks, gybes }}
-          showLegend
-        />
+        <div className="flex flex-col gap-3">
+          {windGridFC?.features?.length ? (
+            <label className="flex items-center gap-2 text-sm text-splice-ocean dark:text-splice-water">
+              <input
+                type="checkbox"
+                checked={showWindGrid}
+                onChange={(e) => setShowWindGrid(e.target.checked)}
+                className="rounded border-splice-sky"
+              />
+              Show fleet wind grid (50 m cells · 5 min periods · arrows = wind flow)
+            </label>
+          ) : null}
+          <CourseAnalysisMap
+            marks={mapMarks ?? {}}
+            trackPoints={points}
+            courseLine={courseLine}
+            draggableAllMarks={false}
+            startFinishLine={startFinishLine ?? null}
+            trackSegmentFC={snapshot.trackSegmentFC ?? null}
+            legGatesFC={legGatesFC ?? null}
+            showMarkGates={showMarkGates}
+            manoeuvres={{ tacks, gybes }}
+            windGridFC={windGridFC}
+            showWindGrid={showWindGrid}
+            showLegend
+          />
+        </div>
       ) : null}
 
       {tab === "manoeuvres" ? (

@@ -30,6 +30,7 @@ export function AnalysisInteractive({
   initialCourseSetup,
   trackPoints,
   collatedPreset = false,
+  windGridFC = null,
 }: {
   submissionId: string;
   snapshot: AnalysisSnapshot;
@@ -43,6 +44,7 @@ export function AnalysisInteractive({
   trackPoints: { lat: number; lon: number; time?: number | null }[];
   /** RO has set course/wind — sailor may fine-tune marks, wind, and GPS offset. */
   collatedPreset?: boolean;
+  windGridFC?: GeoJSON.FeatureCollection | { type: string; features: unknown[] } | null;
 }) {
   const [showAdjustments, setShowAdjustments] = useState(false);
   const [markOverrides, setMarkOverrides] = useState(initialMarkOverrides);
@@ -171,6 +173,7 @@ export function AnalysisInteractive({
         windOverride={windOverride}
         onWindOverrideChange={setWindOverride}
         editableWind
+        windGridFC={windGridFC}
       />
     </div>
   );

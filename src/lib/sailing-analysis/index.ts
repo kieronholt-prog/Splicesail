@@ -47,3 +47,13 @@ export * from "./wsc-seed";
 export type { AnalysisRunInput } from "./run-analysis-wrapper";
 
 export { executeAnalysis, serializeAnalysisForDb } from "./run-analysis-wrapper";
+  export {
+  buildFleetWindGrid,
+  fleetWindGridToGeoJSON,
+  parseFleetWindGrid,
+  extractUpwindSamplesBetweenTacks,
+  tackAngleFromSnapshot,
+  twaFromTackAngle,
+  type FleetWindGrid,
+} from "./fleet-wind-grid";
+export { buildFleetWindGridForRaceFleet, persistFleetWindGrid } from "./persist-fleet-wind-grid";

@@ -35,6 +35,8 @@ export type CourseAnalysisMapProps = {
   showMarkGates?: boolean;
   manoeuvres?: MapManoeuvres | null;
   fleetTracks?: FleetTrackOverlay[];
+  windGridFC?: GeoJSON.FeatureCollection | { type: string; features: unknown[] } | null;
+  showWindGrid?: boolean;
   showLegend?: boolean;
   className?: string;
 };
@@ -51,6 +53,8 @@ export function CourseAnalysisMap({
   showMarkGates = false,
   manoeuvres,
   fleetTracks = [],
+  windGridFC = null,
+  showWindGrid = false,
   showLegend = false,
   className,
 }: CourseAnalysisMapProps) {
@@ -296,6 +300,88 @@ export function CourseAnalysisMap({
     trackPaintColor,
     trackPoints,
   ]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+
+    const empty = { type: "FeatureCollection" as const, features: [] };
+    const data =
+      showWindGrid && windGridFC?.features?.length
+        ? (windGridFC as GeoJSON.FeatureCollection)
+        : empty;
+
+    const fillSrc = map.getSource("wind-grid-cells") as mapboxgl.GeoJSONSource | undefined;
+    if (fillSrc) {
+      fillSrc.setData(data);
+    } else if (showWindGrid) {
+      map.addSource("wind-grid-cells", { type: "geojson", data });
+      map.addLayer(
+        {
+          id: "wind-grid-fill",
+          type: "fill",
+          source: "wind-grid-cells",
+          filter: ["==", ["get", "kind"], "cell"],
+          paint: {
+            "fill-color": [
+              "interpolate",
+              ["linear"],
+              ["get", "windFromDeg"],
+              0,
+              "#3b82f6",
+              90,
+              "#22d3ee",
+              180,
+              "#a855f7",
+              270,
+              "#f59e0b",
+              360,
+              "#3b82f6",
+            ],
+            "fill-opacity": ["*", 0.22, ["get", "confidence"]],
+          },
+        },
+        lineLayerBeforeLabels(map),
+      );
+      map.addLayer(
+        {
+          id: "wind-grid-outline",
+          type: "line",
+          source: "wind-grid-cells",
+          filter: ["==", ["get", "kind"], "cell"],
+          paint: {
+            "line-color": "#ffffff",
+            "line-width": 0.6,
+            "line-opacity": ["*", 0.45, ["get", "confidence"]],
+          },
+        },
+        lineLayerBeforeLabels(map),
+      );
+      map.addLayer(
+        {
+          id: "wind-grid-arrows",
+          type: "symbol",
+          source: "wind-grid-cells",
+          filter: ["==", ["get", "kind"], "arrow"],
+          layout: {
+            "text-field": "↓",
+            "text-size": 16,
+            "text-rotate": ["get", "windToDeg"],
+            "text-rotation-alignment": "map",
+            "text-allow-overlap": true,
+            "text-ignore-placement": true,
+          },
+          paint: {
+            "text-color": "#ffffff",
+            "text-halo-color": "#0a1020",
+            "text-halo-width": 1.2,
+            "text-opacity": ["*", 0.95, ["get", "confidence"]],
+          },
+        },
+        lineLayerBeforeLabels(map),
+      );
+    }
+  }, [windGridFC, mapLoaded, showWindGrid]);
 
   useEffect(() => {
     const map = mapRef.current;

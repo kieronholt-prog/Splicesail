@@ -26,6 +26,7 @@ export function SetupCourseMapSection({
   previewEnabled = true,
   userWind,
   fleetTracks = [],
+  windGridFC = null,
   onWindChange,
 }: {
   clubMarks: SailingMarkRow[];
@@ -39,9 +40,11 @@ export function SetupCourseMapSection({
   previewEnabled?: boolean;
   userWind?: number | null;
   fleetTracks?: FleetTrackOverlay[];
+  windGridFC?: GeoJSON.FeatureCollection | { type: string; features: unknown[] } | null;
   onWindChange?: (deg: number) => void;
 }) {
   const [showMarkGates, setShowMarkGates] = useState(true);
+  const [showWindGrid, setShowWindGrid] = useState(true);
 
   const sfEnds = useMemo(() => sfLineFromCourseSetup(courseSetup), [courseSetup]);
 
@@ -98,6 +101,17 @@ export function SetupCourseMapSection({
           />
           Show mark rounding gate lines
         </label>
+        {windGridFC?.features?.length ? (
+          <label className="flex items-center gap-2 text-sm text-splice-ocean dark:text-splice-water">
+            <input
+              type="checkbox"
+              checked={showWindGrid}
+              onChange={(e) => setShowWindGrid(e.target.checked)}
+              className="rounded border-splice-sky"
+            />
+            Show fleet wind grid (50 m · 5 min)
+          </label>
+        ) : null}
         {onWindChange ? (
           <div className="w-[200px]">
             <WindRose
@@ -126,6 +140,8 @@ export function SetupCourseMapSection({
         }
         showLegend
         fleetTracks={fleetTracks}
+        windGridFC={windGridFC}
+        showWindGrid={showWindGrid}
       />
       {!preview && trackPoints.length >= 20 ? (
         <p className="text-xs text-amber-700 dark:text-amber-200">
