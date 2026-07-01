@@ -3,6 +3,7 @@
 /* Auto-extracted from Sailstats index.html */
 import { attachCourseDir, courseDirFromPoint, isUpwindHemisphere } from "./geo-heading";
 import { classifyManoeuvreByWindCrossing } from "./manoeuvre-wind-crossing";
+import { buildUpwindBetweenTackPointKinds } from "./upwind-tack-track-segments";
 import { expandEntriesForLaps } from "./course-mark-entries";
 import { expandResolvedCourseMarks as expandResolvedCourseMarksForEngine } from "./course-wind-baseline";
 const DETECTION_DEFAULTS={
@@ -2548,9 +2549,79 @@ function buildTrackSegmentFeatureCollectionWithLegDiagnostics(pts,legBuildLog,ro
   }
   return{type:"FeatureCollection",features:feats};
 }
+/** Overlay upwind port/stbd tack colours between racing tacks (over leg palette, under rounding). */
+function overlayUpwindTackKindsOnPointKinds(kinds,upwindKinds,roundingMask){
+  const n=kinds?.length||0;
+  if(!n||!upwindKinds?.length)return kinds;
+  const mask=roundingMask&&roundingMask.length===n?roundingMask:new Array(n).fill(false);
+  for(let i=0;i<n;i++){
+    if(mask[i]){kinds[i]="rounding";continue;}
+    const uk=upwindKinds[i];
+    if(uk==="upwind_port"||uk==="upwind_stbd")kinds[i]=uk;
+  }
+  return kinds;
+}
+function buildTrackSegmentFCFromPointKinds(pts,pointKinds){
+  if(!pts||pts.length<2)return{type:"FeatureCollection",features:[]};
+  const n=pts.length;
+  const kinds=pointKinds&&pointKinds.length===n?pointKinds:new Array(n).fill("base");
+  const feats=[];
+  let segStart=0;
+  let kind=kinds[0]||"base";
+  const pushSeg=(a,b,k)=>{
+    if(b<a)return;
+    const coords=[];
+    for(let j=a;j<=b;j++)coords.push([pts[j].lon,pts[j].lat]);
+    if(coords.length===1)coords.push(coords[0]);
+    if(coords.length>=2)feats.push({type:"Feature",properties:{kind:k},geometry:{type:"LineString",coordinates:coords}});
+  };
+  for(let i=1;i<n;i++){
+    const rk=kinds[i]||"base";
+    if(rk!==kind){
+      pushSeg(segStart,i-1,kind);
+      segStart=i-1;
+      kind=rk;
+    }
+  }
+  pushSeg(segStart,n-1,kind);
+  if(!feats.length){
+    return{type:"FeatureCollection",features:[{type:"Feature",properties:{kind:"base"},geometry:{type:"LineString",coordinates:pts.map(p=>[p.lon,p.lat])}}]};
+  }
+  return{type:"FeatureCollection",features:feats};
+}
+function buildTrackSegmentFeatureCollectionWithUpwindTacks(pts,roundingMask,upwindKinds){
+  const n=pts?.length||0;
+  const kinds=new Array(n).fill("normal");
+  overlayUpwindTackKindsOnPointKinds(kinds,upwindKinds,roundingMask);
+  return buildTrackSegmentFCFromPointKinds(pts,kinds);
+}
+function buildTrackSegmentFeatureCollectionWithLegDiagnosticsAndUpwindTacks(pts,legBuildLog,roundingMask,upwindKinds){
+  if(!pts||pts.length<2)return{type:"FeatureCollection",features:[]};
+  const n=pts.length;
+  const mask=roundingMask&&roundingMask.length===n?roundingMask:new Array(n).fill(false);
+  const kinds=new Array(n).fill("base");
+  if(Array.isArray(legBuildLog)){
+    legBuildLog.forEach(row=>{
+      const a=row.startIdx|0,b=row.endIdx|0,si=row.stepIndex|0;
+      if(a<0||b>=n||a>b||!Number.isFinite(a)||!Number.isFinite(b))return;
+      const ok=row.status==="included"||row.status==="ok";
+      const tag=ok?`leg${si}`:`leg_skip_${si}`;
+      for(let i=a;i<=b;i++)kinds[i]=tag;
+    });
+  }
+  for(let i=0;i<n;i++)if(mask[i])kinds[i]="rounding";
+  overlayUpwindTackKindsOnPointKinds(kinds,upwindKinds,mask);
+  return buildTrackSegmentFCFromPointKinds(pts,kinds);
+}
 /** Mapbox GL `line-color` expression: rounding (orange), leg0…15, leg_skip_0…15 (grey), base (teal). */
 function mapboxTrackLineColorByKindExpr(defaultTrkColor,roundingColor){
-  const pairs=["rounding",roundingColor,"base",defaultTrkColor,"normal",defaultTrkColor];
+  const pairs=[
+    "rounding",roundingColor,
+    "upwind_port",MAP_MANEUVER_COLORS.port,
+    "upwind_stbd",MAP_MANEUVER_COLORS.stbd,
+    "base",defaultTrkColor,
+    "normal",defaultTrkColor,
+  ];
   for(let i=0;i<16;i++){
     pairs.push(`leg${i}`,TRACK_LEG_SEGMENT_PALETTE[i%TRACK_LEG_SEGMENT_PALETTE.length]);
     pairs.push(`leg_skip_${i}`,TRACK_LEG_SKIP_COLOR);
@@ -3908,9 +3979,10 @@ function runAnalysis(rawPts,userWind=null,markPositions=null,laps=1,preamble=nul
 
   const markDetForMask=markRoundingDetailsAll.filter(d=>!d.skipped);
   const roundingPointMask=computeRoundingPointMask(en,markDetForMask,baselines);
+  const upwindTackKinds=buildUpwindBetweenTackPointKinds(en,tacks,legs,wd);
   const trackSegmentFC=legDiagnostics?.legBuild?.length
-    ? buildTrackSegmentFeatureCollectionWithLegDiagnostics(en,legDiagnostics.legBuild,roundingPointMask)
-    : buildTrackSegmentFeatureCollection(en,roundingPointMask);
+    ? buildTrackSegmentFeatureCollectionWithLegDiagnosticsAndUpwindTacks(en,legDiagnostics.legBuild,roundingPointMask,upwindTackKinds)
+    : buildTrackSegmentFeatureCollectionWithUpwindTacks(en,roundingPointMask,upwindTackKinds);
 
   const hasMansForVMG=manoeuvreEvents.some(m=>!m.excludeFromStatsAndVMG);
   const vmcMode=hasMansForVMG?"magnitude":"targeted";

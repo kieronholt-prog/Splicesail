@@ -28,6 +28,8 @@ export function MapSetupLegend() {
         </div>
         <LegendLine color={TRACK_LEG_SKIP_COLOR} label="Skipped leg" dashed />
         <LegendLine color={TRK_ROUND} label="Mark-rounding band" />
+        <LegendLine color="#ff4a6a" label="Upwind on port tack (between tacks)" />
+        <LegendLine color="#4aff8a" label="Upwind on starboard tack (between tacks)" />
         <LegendLine color="#94a3b8" label="Course connector" dashed />
         <LegendLine color="#ffffff" label="Start / finish line" />
         <LegendLine color={MAP_RND_BISECTOR_LINE} label="Rounding bisectors (when shown)" dashed />

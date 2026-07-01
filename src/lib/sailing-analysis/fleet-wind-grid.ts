@@ -1,4 +1,8 @@
 import { courseDirFromPoint, signedAngleFromWind } from "./geo-heading";
+import {
+  relativeToWindFrom,
+  tackSideFromRelative,
+} from "./manoeuvre-wind-crossing";
 
 const D = Math.PI / 180;
 const RE = 6371000;
@@ -7,6 +11,8 @@ const DEFAULT_TIME_BUCKET_SEC = 300;
 const MIN_SPEED_KTS = 0.8;
 const MIN_UPWIND_VMG_KTS = 0.25;
 const DEFAULT_TACK_ANGLE_DEG = 84;
+const HEADING_AGREEMENT_SIGMA_DEG = 14;
+const WIND_AGREEMENT_SIGMA_DEG = 18;
 
 export type FleetWindGridCell = {
   i: number;
@@ -33,14 +39,16 @@ export type WindGridSample = {
   lat: number;
   lon: number;
   time: number;
+  cogDeg: number;
   windFromDeg: number;
   speedKts: number;
   vmgKts: number;
   submissionId: string;
+  tackSide: "P" | "S";
   weight: number;
 };
 
-type AnalysisPoint = {
+export type AnalysisPoint = {
   lat?: number;
   lon?: number;
   time?: number;
@@ -50,16 +58,17 @@ type AnalysisPoint = {
   cog?: number;
 };
 
-type AnalysisTack = {
+export type AnalysisTack = {
   type?: string;
   turnIdx?: number;
   idx?: number;
+  crossing?: string;
   excludeFromStatsAndVMG?: boolean;
   sideAft?: "P" | "S";
   sideBef?: "P" | "S";
 };
 
-type AnalysisLeg = {
+export type AnalysisLeg = {
   type?: string;
   startIdx?: number;
   endIdx?: number;
@@ -71,9 +80,19 @@ type AnalysisSnapshotLike = {
   legs?: AnalysisLeg[];
   windDir?: number | null;
   baselines?: { tackAngle?: number | null };
-  upwindByTack?: { p2sTwaDiff?: number | null };
+  upwindByTack?: {
+    port?: { twaFromWind?: number | null };
+    stbd?: { twaFromWind?: number | null };
+    p2sTwaDiff?: number | null;
+  };
   stats?: {
-    tackStatsByLegType?: { upwind?: { p2sTwaDiff?: number | null } };
+    tackStatsByLegType?: {
+      upwind?: {
+        port?: { twaFromWind?: number | null };
+        stbd?: { twaFromWind?: number | null };
+        p2sTwaDiff?: number | null;
+      };
+    };
   };
 };
 
@@ -88,27 +107,29 @@ function vmgToWindKts(sogKts: number, cogDeg: number, windFromDeg: number): numb
   return sogKts * Math.cos(twa * D);
 }
 
-function isPortTack(cogDeg: number, windFromDeg: number): boolean {
-  const rel = (cogDeg - windFromDeg + 360) % 360;
-  return rel <= 180;
-}
-
-/** Port: wind from = COG − TWA; starboard: wind from = COG + TWA. */
+/**
+ * Wind FROM (°T) from boat course and tack side.
+ * Port tack: wind from = COG − TWA; starboard tack: wind from = COG + TWA.
+ */
 export function windFromCogAndTackSide(cogDeg: number, twaDeg: number, side: "P" | "S"): number {
   if (side === "P") return (cogDeg - twaDeg + 360) % 360;
   return (cogDeg + twaDeg + 360) % 360;
 }
 
-function resolveTackSide(
-  manoeuvre: { sideAft?: "P" | "S"; sideBef?: "P" | "S" } | undefined,
+/** Tack side immediately after a manoeuvre completes (sailing on this side until next tack). */
+export function tackSideAfterManoeuvre(
+  manoeuvre: Pick<AnalysisTack, "sideAft" | "sideBef" | "crossing">,
   cogDeg: number,
   windFromDeg: number,
 ): "P" | "S" {
-  if (manoeuvre?.sideAft === "P" || manoeuvre?.sideAft === "S") return manoeuvre.sideAft;
-  return isPortTack(cogDeg, windFromDeg) ? "P" : "S";
+  if (manoeuvre.sideAft === "P" || manoeuvre.sideAft === "S") return manoeuvre.sideAft;
+  if (manoeuvre.crossing === "P→S") return "S";
+  if (manoeuvre.crossing === "S→P") return "P";
+  const rel = relativeToWindFrom(cogDeg, windFromDeg);
+  return tackSideFromRelative(rel);
 }
 
-function buildLegTypeAtIndex(pts: AnalysisPoint[], legs: AnalysisLeg[]): (string | null)[] {
+export function buildLegTypeAtIndex(pts: AnalysisPoint[], legs: AnalysisLeg[]): (string | null)[] {
   const out = new Array<string | null>(pts.length).fill(null);
   for (const leg of legs) {
     if (leg.startIdx == null || leg.endIdx == null || !leg.type) continue;
@@ -117,6 +138,18 @@ function buildLegTypeAtIndex(pts: AnalysisPoint[], legs: AnalysisLeg[]): (string
     for (let i = a; i <= b; i++) out[i] = leg.type;
   }
   return out;
+}
+
+export function extractRacingTackManoeuvres(tacks: AnalysisTack[], pointCount: number) {
+  return (tacks ?? [])
+    .filter((t) => t.type === "tack" && !t.excludeFromStatsAndVMG)
+    .map((t) => ({
+      idx: Math.max(0, Math.min(pointCount - 1, t.turnIdx ?? t.idx ?? 0)),
+      sideAft: t.sideAft,
+      sideBef: t.sideBef,
+      crossing: t.crossing,
+    }))
+    .sort((a, b) => a.idx - b.idx);
 }
 
 /** Average included tack angle (°) from analysis baselines, else port/stbd TWA spread. */
@@ -132,9 +165,58 @@ export function tackAngleFromSnapshot(snapshot: AnalysisSnapshotLike): number {
   return DEFAULT_TACK_ANGLE_DEG;
 }
 
-/** TWA for wind inference: half the average tack angle (same on port and starboard). */
+/** TWA for wind inference: half the average tack angle (symmetric fallback). */
 export function twaFromTackAngle(tackAngleDeg: number): number {
   return Math.max(15, Math.min(75, tackAngleDeg / 2));
+}
+
+/**
+ * Likely TWA (°) for wind inference on a tack side.
+ * Prefers measured upwind port/stbd TWA from analysis; falls back to half tack angle.
+ */
+export function likelyTwaFromSnapshot(snapshot: AnalysisSnapshotLike, tackSide: "P" | "S"): number {
+  const upwindStats =
+    snapshot.upwindByTack ?? snapshot.stats?.tackStatsByLegType?.upwind ?? null;
+  const sideBlock = tackSide === "P" ? upwindStats?.port : upwindStats?.stbd;
+  const measured = sideBlock?.twaFromWind;
+  if (measured != null && Number.isFinite(measured) && measured >= 15 && measured <= 80) {
+    return measured;
+  }
+  return twaFromTackAngle(tackAngleFromSnapshot(snapshot));
+}
+
+function resolveSegmentTackSide(
+  exitTack: ReturnType<typeof extractRacingTackManoeuvres>[0],
+  entryTack: ReturnType<typeof extractRacingTackManoeuvres>[0],
+  cogDeg: number,
+  windFromDeg: number,
+): "P" | "S" {
+  let side = tackSideAfterManoeuvre(exitTack, cogDeg, windFromDeg);
+  const entryBef = entryTack.sideBef === "P" || entryTack.sideBef === "S" ? entryTack.sideBef : null;
+  if (entryBef && entryBef !== side) {
+    if (exitTack.sideAft === "P" || exitTack.sideAft === "S") {
+      side = exitTack.sideAft;
+    } else if (entryBef) {
+      side = entryBef;
+    }
+  }
+  return side;
+}
+
+function smallestAngleBetween(a: number, b: number): number {
+  let d = Math.abs(a - b) % 360;
+  if (d > 180) d = 360 - d;
+  return d;
+}
+
+function headingAgreementWeight(cogDeg: number, fleetMedianCog: number, sigma = HEADING_AGREEMENT_SIGMA_DEG): number {
+  const d = smallestAngleBetween(cogDeg, fleetMedianCog);
+  return Math.exp(-0.5 * (d / sigma) ** 2);
+}
+
+function windAgreementWeight(windDeg: number, fleetMeanWind: number, sigma = WIND_AGREEMENT_SIGMA_DEG): number {
+  const d = smallestAngleBetween(windDeg, fleetMeanWind);
+  return Math.exp(-0.5 * (d / sigma) ** 2);
 }
 
 /** Upwind GPS samples on steady legs between consecutive racing tacks. */
@@ -147,29 +229,21 @@ export function extractUpwindSamplesBetweenTacks(
   const legs = snapshot.legs ?? [];
   if (points.length < 3) return [];
 
-  const twaDeg = twaFromTackAngle(tackAngleFromSnapshot(snapshot));
   const legTypeAt = buildLegTypeAtIndex(points, legs);
-
-  const tackManoeuvres = (snapshot.tacks ?? [])
-    .filter((t) => t.type === "tack" && !t.excludeFromStatsAndVMG)
-    .map((t) => ({
-      idx: Math.max(0, Math.min(points.length - 1, t.turnIdx ?? t.idx ?? 0)),
-      sideAft: t.sideAft,
-      sideBef: t.sideBef,
-    }))
-    .sort((a, b) => a.idx - b.idx);
-
+  const tackManoeuvres = extractRacingTackManoeuvres(snapshot.tacks ?? [], points.length);
   if (tackManoeuvres.length < 2) return [];
 
   const out: Omit<WindGridSample, "weight">[] = [];
 
   for (let t = 0; t < tackManoeuvres.length - 1; t++) {
-    const from = tackManoeuvres[t]!.idx;
-    const to = tackManoeuvres[t + 1]!.idx;
+    const exitTack = tackManoeuvres[t]!;
+    const entryTack = tackManoeuvres[t + 1]!;
+    const from = exitTack.idx;
+    const to = entryTack.idx;
     if (to - from < 4) continue;
 
-    const exitTack = tackManoeuvres[t];
     let segmentTackSide: "P" | "S" | null = null;
+    let twaDeg: number | null = null;
 
     for (let i = from + 1; i < to; i++) {
       const p = points[i];
@@ -184,17 +258,20 @@ export function extractUpwindSamplesBetweenTacks(
       if (vmg == null || vmg < MIN_UPWIND_VMG_KTS) continue;
 
       if (!segmentTackSide) {
-        segmentTackSide = resolveTackSide(exitTack, cog, refWindFromDeg);
+        segmentTackSide = resolveSegmentTackSide(exitTack, entryTack, cog, refWindFromDeg);
+        twaDeg = likelyTwaFromSnapshot(snapshot, segmentTackSide);
       }
 
       out.push({
         lat: p.lat,
         lon: p.lon,
         time: p.time,
-        windFromDeg: windFromCogAndTackSide(cog, twaDeg, segmentTackSide),
+        cogDeg: cog,
+        windFromDeg: windFromCogAndTackSide(cog, twaDeg!, segmentTackSide),
         speedKts,
         vmgKts: vmg,
         submissionId,
+        tackSide: segmentTackSide,
       });
     }
   }
@@ -239,6 +316,51 @@ function speedAlignmentWeight(speedKts: number, fleetMean: number, sigma: number
   return Math.max(0.15, speedKts) * Math.exp(-0.5 * z * z);
 }
 
+/** Boost sample weights when fleet boats on the same tack share similar COG and inferred wind. */
+function applyFleetProximityWeights(
+  samples: WindGridSample[],
+  cellSizeM: number,
+  timeBucketSec: number,
+  originLat: number,
+  originLon: number,
+): void {
+  type Group = { cogs: number[]; winds: number[]; weights: number[]; indices: number[] };
+  const groups = new Map<string, Group>();
+
+  for (let idx = 0; idx < samples.length; idx++) {
+    const s = samples[idx]!;
+    const { east, north } = toLocalEN(s.lat, s.lon, originLat, originLon);
+    const i = Math.floor(east / cellSizeM);
+    const j = Math.floor(north / cellSizeM);
+    const timeBucket = Math.floor(s.time / timeBucketSec) * timeBucketSec;
+    const key = `${i},${j},${timeBucket},${s.tackSide}`;
+    let g = groups.get(key);
+    if (!g) {
+      g = { cogs: [], winds: [], weights: [], indices: [] };
+      groups.set(key, g);
+    }
+    g.cogs.push(s.cogDeg);
+    g.winds.push(s.windFromDeg);
+    g.weights.push(s.weight);
+    g.indices.push(idx);
+  }
+
+  for (const g of groups.values()) {
+    if (g.indices.length < 2) continue;
+    const medianCog = circularMeanDeg(g.cogs, g.weights);
+    const meanWind = circularMeanDeg(g.winds, g.weights);
+    if (medianCog == null || meanWind == null) continue;
+    const boatCount = new Set(g.indices.map((i) => samples[i]!.submissionId)).size;
+    const fleetBoost = boatCount >= 2 ? 1 + 0.25 * (boatCount - 1) : 1;
+    for (const idx of g.indices) {
+      const s = samples[idx]!;
+      const hW = headingAgreementWeight(s.cogDeg, medianCog);
+      const wW = windAgreementWeight(s.windFromDeg, meanWind);
+      s.weight *= Math.max(0.35, hW * wW) * fleetBoost;
+    }
+  }
+}
+
 export function buildFleetWindGrid(
   boatSnapshots: { submissionId: string; snapshot: AnalysisSnapshotLike }[],
   refWindFromDeg: number,
@@ -280,6 +402,8 @@ export function buildFleetWindGrid(
     maxLon = Math.max(maxLon, s.lon);
   }
   const origin = { lat: (minLat + maxLat) / 2, lon: (minLon + maxLon) / 2 };
+
+  applyFleetProximityWeights(rawSamples, cellSizeM, timeBucketSec, origin.lat, origin.lon);
 
   type Bucket = {
     winds: number[];

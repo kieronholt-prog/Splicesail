@@ -5,12 +5,23 @@ import {
   extractUpwindSamplesBetweenTacks,
   fleetWindGridTimeBuckets,
   fleetWindGridToGeoJSON,
+  likelyTwaFromSnapshot,
   tackAngleFromSnapshot,
+  tackSideAfterManoeuvre,
   twaFromTackAngle,
   windFromCogAndTackSide,
 } from "./fleet-wind-grid";
+import {
+  buildUpwindBetweenTackPointKinds,
+  buildUpwindBetweenTackTrackSegmentFC,
+} from "./upwind-tack-track-segments";
 
-function makeUpwindTrack(windFrom: number, portCog: number, stbdCog: number, t0: number) {
+function makeUpwindTrack(
+  windFrom: number,
+  portCog: number,
+  stbdCog: number,
+  t0 = 1_700_000_000,
+) {
   const points: {
     lat: number;
     lon: number;
@@ -39,10 +50,14 @@ function makeUpwindTrack(windFrom: number, portCog: number, stbdCog: number, t0:
   add(portCog, 15);
   tackIndices.push(44);
 
-  const tacks = tackIndices.map((turnIdx) => ({
+  const tackAngle = Math.abs(((portCog - stbdCog + 540) % 360) - 180);
+  const tacks = tackIndices.map((turnIdx, i) => ({
     type: "tack",
     turnIdx,
     excludeFromStatsAndVMG: false,
+    crossing: i % 2 === 0 ? "P→S" : "S→P",
+    sideAft: i % 2 === 0 ? "S" : "P",
+    sideBef: i % 2 === 0 ? "P" : "S",
   }));
 
   const legs = [{ type: "upwind", startIdx: 0, endIdx: points.length - 1 }];
@@ -52,7 +67,12 @@ function makeUpwindTrack(windFrom: number, portCog: number, stbdCog: number, t0:
     tacks,
     legs,
     windDir: windFrom,
-    baselines: { tackAngle: Math.abs(((portCog - stbdCog + 540) % 360) - 180) },
+    baselines: { tackAngle },
+    upwindByTack: {
+      port: { twaFromWind: tackAngle / 2 },
+      stbd: { twaFromWind: tackAngle / 2 },
+      p2sTwaDiff: tackAngle,
+    },
   };
 }
 
@@ -60,6 +80,21 @@ test("twaFromTackAngle uses half the average tack angle", () => {
   assert.equal(twaFromTackAngle(84), 42);
   assert.equal(twaFromTackAngle(100), 50);
   assert.equal(twaFromTackAngle(90), 45);
+});
+
+test("likelyTwaFromSnapshot prefers measured port/stbd TWA", () => {
+  const snap = {
+    baselines: { tackAngle: 84 },
+    upwindByTack: { port: { twaFromWind: 38 }, stbd: { twaFromWind: 44 } },
+  };
+  assert.equal(likelyTwaFromSnapshot(snap, "P"), 38);
+  assert.equal(likelyTwaFromSnapshot(snap, "S"), 44);
+});
+
+test("tackSideAfterManoeuvre uses sideAft and crossing labels", () => {
+  assert.equal(tackSideAfterManoeuvre({ sideAft: "P" }, 90, 0), "P");
+  assert.equal(tackSideAfterManoeuvre({ crossing: "P→S" }, 90, 0), "S");
+  assert.equal(tackSideAfterManoeuvre({ crossing: "S→P" }, 270, 0), "P");
 });
 
 test("windFromCogAndTackSide: starboard COG 180 with TWA 45 gives wind from 225", () => {
@@ -70,6 +105,23 @@ test("windFromCogAndTackSide: port COG 135 with TWA 45 gives wind from 90", () =
   assert.equal(windFromCogAndTackSide(135, 45, "P"), 90);
 });
 
+test("wind inference round-trip: inferred wind matches reference for symmetric track", () => {
+  const wind = 10;
+  const twa = 42;
+  const portCog = (wind + twa + 360) % 360;
+  const stbdCog = (wind - twa + 360) % 360;
+  const snap = makeUpwindTrack(wind, portCog, stbdCog);
+  const samples = extractUpwindSamplesBetweenTacks(snap, "sub-a", wind);
+  assert.ok(samples.length >= 10);
+  for (const s of samples) {
+    const err = Math.min(
+      Math.abs(s.windFromDeg - wind),
+      360 - Math.abs(s.windFromDeg - wind),
+    );
+    assert.ok(err < 6, `wind error ${err} for tack ${s.tackSide}`);
+  }
+});
+
 test("extractUpwindSamplesBetweenTacks yields samples between tacks", () => {
   const wind = 0;
   const snap = makeUpwindTrack(wind, 42, 318);
@@ -78,7 +130,21 @@ test("extractUpwindSamplesBetweenTacks yields samples between tacks", () => {
   for (const s of samples) {
     assert.ok(s.vmgKts > 0);
     assert.ok(s.windFromDeg >= 0 && s.windFromDeg < 360);
+    assert.ok(s.tackSide === "P" || s.tackSide === "S");
   }
+});
+
+test("buildUpwindBetweenTackPointKinds colours port and starboard segments", () => {
+  const wind = 10;
+  const snap = makeUpwindTrack(wind, 52, 328);
+  const kinds = buildUpwindBetweenTackPointKinds(snap.points, snap.tacks, snap.legs, wind);
+  const portPts = kinds.filter((k) => k === "upwind_port").length;
+  const stbdPts = kinds.filter((k) => k === "upwind_stbd").length;
+  assert.ok(portPts > 0);
+  assert.ok(stbdPts > 0);
+  const fc = buildUpwindBetweenTackTrackSegmentFC(snap.points, snap.tacks, snap.legs, wind);
+  assert.ok(fc.features.some((f) => f.properties?.kind === "upwind_port"));
+  assert.ok(fc.features.some((f) => f.properties?.kind === "upwind_stbd"));
 });
 
 test("buildFleetWindGrid merges two boats in same cell", () => {

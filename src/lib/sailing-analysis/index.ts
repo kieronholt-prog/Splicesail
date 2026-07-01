@@ -54,6 +54,13 @@ export { executeAnalysis, serializeAnalysisForDb } from "./run-analysis-wrapper"
   extractUpwindSamplesBetweenTacks,
   tackAngleFromSnapshot,
   twaFromTackAngle,
+  likelyTwaFromSnapshot,
+  tackSideAfterManoeuvre,
+  windFromCogAndTackSide,
   type FleetWindGrid,
 } from "./fleet-wind-grid";
+export {
+  buildUpwindBetweenTackPointKinds,
+  buildUpwindBetweenTackTrackSegmentFC,
+} from "./upwind-tack-track-segments";
 export { buildFleetWindGridForRaceFleet, persistFleetWindGrid } from "./persist-fleet-wind-grid";

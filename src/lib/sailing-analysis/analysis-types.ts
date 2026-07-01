@@ -7,6 +7,7 @@ export type AnalysisManoeuvre = {
   ch?: number;
   crossing?: string;
   sideBef?: "P" | "S";
+  sideAft?: "P" | "S";
   q?: number;
   preS?: number;
   minS?: number;
