@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   RoTrackAnalysisFleetPanel,
   type RaceFleetVm,
 } from "@/components/sailing-analysis/ro-track-analysis-fleet-panel";
 import {
-  confirmAllRaceFleetAnalysisAction,
   loadRaceFleetTracksAction,
 } from "@/app/actions/race-track-analysis";
 import type { SailingCourseRow, SailingMarkRow } from "@/lib/sailing-analysis/types";
@@ -70,26 +69,6 @@ export function RoTrackAnalysisSetupForm({
 
   const selectedFleet = raceFleets.find((f) => f.id === selectedFleetId) ?? null;
 
-  const totalPending = useMemo(
-    () => Object.values(collatedCountsByFleetId).reduce((a, c) => a + c.pending, 0),
-    [collatedCountsByFleetId],
-  );
-
-  const fleetsReadyForBulk = useMemo(() => {
-    return raceFleets.filter((f) => {
-      const pending = collatedCountsByFleetId[f.id]?.pending ?? 0;
-      if (pending === 0) return true;
-      return Boolean(settingsByFleetId[f.id]?.course_letter);
-    });
-  }, [raceFleets, collatedCountsByFleetId, settingsByFleetId]);
-
-  const canAnalyseAll =
-    totalPending > 0 &&
-    raceFleets.every((f) => {
-      const pending = collatedCountsByFleetId[f.id]?.pending ?? 0;
-      return pending === 0 || settingsByFleetId[f.id]?.course_letter;
-    });
-
   const pillBase =
     "rounded-full px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap";
   const pillActive =
@@ -112,8 +91,8 @@ export function RoTrackAnalysisSetupForm({
     <div className="flex flex-col gap-8">
       <p className="text-sm text-splice-ocean dark:text-splice-water">
         Select a fleet below, set <strong className="font-medium text-splice-navy dark:text-splice-foam">course and laps</strong>
-        , drag marks if needed, and <strong className="font-medium text-splice-navy dark:text-splice-foam">save</strong>{" "}
-        — tracks are not required for saving. When collated uploads arrive, analyse each fleet (or all at once).
+        , drag marks if needed, then click <strong className="font-medium text-splice-navy dark:text-splice-foam">Save &amp; analyse</strong>{" "}
+        to save settings and run analysis on all collated tracks in that fleet.
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -163,29 +142,6 @@ export function RoTrackAnalysisSetupForm({
           collatedCounts={collatedCountsByFleetId[selectedFleetId] ?? { pending: 0, ready: 0 }}
         />
         )
-      ) : null}
-
-      {totalPending > 0 ? (
-        <div className="border-t border-splice-sky pt-6 dark:border-splice-navy-light">
-          <form action={confirmAllRaceFleetAnalysisAction}>
-            <input type="hidden" name="group_id" value={groupId} />
-            <input type="hidden" name="race_id" value={raceId} />
-            <input type="hidden" name="series_id" value={seriesId} />
-            <button
-              type="submit"
-              disabled={!canAnalyseAll}
-              className="rounded-lg bg-splice-navy px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-splice-foam dark:text-splice-navy"
-            >
-              Analyse all fleets ({totalPending} pending)
-            </button>
-            {!canAnalyseAll ? (
-              <p className="mt-2 text-xs text-splice-ocean dark:text-splice-water">
-                Save course settings for each fleet with pending tracks (
-                {fleetsReadyForBulk.length}/{raceFleets.length} ready).
-              </p>
-            ) : null}
-          </form>
-        </div>
       ) : null}
     </div>
   );

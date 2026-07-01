@@ -57,9 +57,12 @@ export function CourseAnalysisMap({
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN?.trim();
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
-  const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const markersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const manMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const onMarkDragRef = useRef(onMarkDrag);
+  const draggingRef = useRef<string | null>(null);
+  const fittedRef = useRef(false);
+  const fitSignatureRef = useRef("");
   const [mapLoaded, setMapLoaded] = useState(false);
 
   onMarkDragRef.current = onMarkDrag;
@@ -95,11 +98,13 @@ export function CourseAnalysisMap({
 
     return () => {
       markersRef.current.forEach((m) => m.remove());
+      markersRef.current.clear();
       manMarkersRef.current.forEach((m) => m.remove());
-      markersRef.current = [];
       manMarkersRef.current = [];
       map.remove();
       mapRef.current = null;
+      fittedRef.current = false;
+      fitSignatureRef.current = "";
       setMapLoaded(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -108,6 +113,19 @@ export function CourseAnalysisMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
+
+    const fitSignature = [
+      trackPoints.length,
+      fleetTracks.map((f) => f.id).join(","),
+      Object.keys(marks).sort().join(","),
+    ].join("|");
+
+    if (fitSignature !== fitSignatureRef.current) {
+      fittedRef.current = false;
+      fitSignatureRef.current = fitSignature;
+    }
+
+    if (fittedRef.current) return;
 
     const allPts: { lat: number; lon: number }[] = [...trackPoints];
     for (const ft of fleetTracks) allPts.push(...ft.points);
@@ -122,6 +140,7 @@ export function CourseAnalysisMap({
         ],
         { padding: 48, maxZoom: 15, duration: 0 },
       );
+      fittedRef.current = true;
       return;
     }
 
@@ -136,6 +155,7 @@ export function CourseAnalysisMap({
         ],
         { padding: 48, maxZoom: 14, duration: 0 },
       );
+      fittedRef.current = true;
     }
   }, [mapLoaded, trackPoints, fleetTracks, marks]);
 
@@ -368,7 +388,13 @@ export function CourseAnalysisMap({
         .addTo(mapRef.current!);
 
       if (draggable && onMarkDragRef.current) {
+        marker.on("dragstart", () => {
+          draggingRef.current = name;
+          el.style.cursor = "grabbing";
+        });
         marker.on("dragend", () => {
+          draggingRef.current = null;
+          el.style.cursor = "grab";
           const lngLat = marker.getLngLat();
           onMarkDragRef.current!(name, lngLat.lat, lngLat.lng);
         });
@@ -381,10 +407,25 @@ export function CourseAnalysisMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
-    markersRef.current.forEach((m) => m.remove());
-    markersRef.current = [];
+
+    const seen = new Set<string>();
     for (const [name, mk] of Object.entries(marks)) {
-      markersRef.current.push(renderMark(name, mk));
+      seen.add(name);
+      const existing = markersRef.current.get(name);
+      if (existing) {
+        if (draggingRef.current !== name) {
+          existing.setLngLat([mk.lon, mk.lat]);
+        }
+        continue;
+      }
+      markersRef.current.set(name, renderMark(name, mk));
+    }
+
+    for (const [name, marker] of markersRef.current) {
+      if (!seen.has(name)) {
+        marker.remove();
+        markersRef.current.delete(name);
+      }
     }
   }, [marks, mapLoaded, renderMark]);
 

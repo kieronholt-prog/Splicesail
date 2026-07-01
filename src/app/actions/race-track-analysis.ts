@@ -63,65 +63,176 @@ function parseSettingsPayload(formData: FormData) {
   return { mark_overrides, course_setup, det_settings };
 }
 
-export async function saveRaceFleetAnalysisSettingsAction(formData: FormData) {
-  const groupId = String(formData.get("group_id") ?? "").trim();
-  const raceId = String(formData.get("race_id") ?? "").trim();
-  const seriesId = String(formData.get("series_id") ?? "").trim();
-  const raceFleetId = String(formData.get("race_fleet_id") ?? "").trim();
-  const courseLetter = String(formData.get("course_letter") ?? "").trim() || null;
-  const laps = Math.max(1, Number(formData.get("laps") ?? 1));
-  const windDirection = formData.get("wind_direction");
+function parseFleetFormIds(formData: FormData) {
+  return {
+    groupId: String(formData.get("group_id") ?? "").trim(),
+    raceId: String(formData.get("race_id") ?? "").trim(),
+    seriesId: String(formData.get("series_id") ?? "").trim(),
+    raceFleetId: String(formData.get("race_fleet_id") ?? "").trim(),
+    courseLetter: String(formData.get("course_letter") ?? "").trim() || null,
+    laps: Math.max(1, Number(formData.get("laps") ?? 1)),
+    windDirection: formData.get("wind_direction"),
+  };
+}
 
+async function persistRaceFleetAnalysisSettings(
+  supabase: Awaited<ReturnType<typeof requireRaceStaff>>["supabase"],
+  opts: {
+    groupId: string;
+    raceId: string;
+    raceFleetId: string;
+    courseLetter: string | null;
+    laps: number;
+    windDirection: FormDataEntryValue | null;
+    mark_overrides: Record<string, MarkOverride>;
+    course_setup: Record<string, unknown>;
+    det_settings: typeof DETECTION_DEFAULTS;
+  },
+): Promise<RaceFleetAnalysisSettingsRow | null> {
+  const fleetStartUtcMs = await resolveFleetStartUtcMs(supabase, opts.raceId, opts.raceFleetId);
+  const course_setup = mergeRaceStartIntoCourseSetup(opts.course_setup, fleetStartUtcMs);
+
+  const row = {
+    race_id: opts.raceId,
+    race_fleet_id: opts.raceFleetId,
+    group_id: opts.groupId,
+    course_letter: opts.courseLetter,
+    laps: opts.laps,
+    wind_direction:
+      opts.windDirection != null && opts.windDirection !== "" ? Number(opts.windDirection) : null,
+    mark_overrides: opts.mark_overrides,
+    course_setup,
+    det_settings: opts.det_settings,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabase
+    .from("race_fleet_analysis_settings")
+    .upsert(row, { onConflict: "race_fleet_id" })
+    .select("*")
+    .single();
+
+  if (error || !data) return null;
+  return data as RaceFleetAnalysisSettingsRow;
+}
+
+export async function saveRaceFleetAnalysisSettingsAction(formData: FormData) {
+  const ids = parseFleetFormIds(formData);
   const parsed = parseSettingsPayload(formData);
-  if (!parsed || !raceFleetId) {
+  if (!parsed || !ids.raceFleetId) {
     redirect(
-      trackAnalysisPath(groupId, seriesId, raceId, `error=${encodeURIComponent("Invalid fleet settings.")}`),
+      trackAnalysisPath(ids.groupId, ids.seriesId, ids.raceId, `error=${encodeURIComponent("Invalid fleet settings.")}`),
     );
   }
 
-  const { supabase } = await requireRaceStaff(groupId, raceId);
+  const { supabase } = await requireRaceStaff(ids.groupId, ids.raceId);
 
   const { data: fleet } = await supabase
     .from("race_fleets")
     .select("id")
-    .eq("id", raceFleetId)
-    .eq("race_id", raceId)
+    .eq("id", ids.raceFleetId)
+    .eq("race_id", ids.raceId)
     .maybeSingle();
 
   if (!fleet) {
     redirect(
-      trackAnalysisPath(groupId, seriesId, raceId, `error=${encodeURIComponent("Fleet not found for this race.")}`),
+      trackAnalysisPath(ids.groupId, ids.seriesId, ids.raceId, `error=${encodeURIComponent("Fleet not found for this race.")}`),
     );
   }
 
-  const fleetStartUtcMs = await resolveFleetStartUtcMs(supabase, raceId, raceFleetId);
-  const course_setup = mergeRaceStartIntoCourseSetup(parsed.course_setup, fleetStartUtcMs);
+  const saved = await persistRaceFleetAnalysisSettings(supabase, {
+    ...ids,
+    ...parsed,
+  });
+  if (!saved) {
+    redirect(
+      trackAnalysisPath(ids.groupId, ids.seriesId, ids.raceId, `error=${encodeURIComponent("Could not save fleet settings.")}`),
+    );
+  }
 
-  await supabase.from("race_fleet_analysis_settings").upsert(
-    {
-      race_id: raceId,
-      race_fleet_id: raceFleetId,
-      group_id: groupId,
-      course_letter: courseLetter,
-      laps,
-      wind_direction: windDirection != null && windDirection !== "" ? Number(windDirection) : null,
-      mark_overrides: parsed.mark_overrides,
-      course_setup,
-      det_settings: parsed.det_settings,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "race_fleet_id" },
-  );
-
-  revalidatePath(trackAnalysisPath(groupId, seriesId, raceId));
+  revalidatePath(trackAnalysisPath(ids.groupId, ids.seriesId, ids.raceId));
   redirect(
     trackAnalysisPath(
-      groupId,
-      seriesId,
-      raceId,
-      `fleet=${encodeURIComponent(raceFleetId)}&settings_saved=1`,
+      ids.groupId,
+      ids.seriesId,
+      ids.raceId,
+      `fleet=${encodeURIComponent(ids.raceFleetId)}&settings_saved=1`,
     ),
   );
+}
+
+/** Save fleet settings from the form, then run or refresh analysis for all collated tracks in that fleet. */
+export async function saveAndAnalyseRaceFleetAnalysisAction(formData: FormData) {
+  const ids = parseFleetFormIds(formData);
+  const parsed = parseSettingsPayload(formData);
+  if (!parsed || !ids.raceFleetId) {
+    redirect(
+      trackAnalysisPath(ids.groupId, ids.seriesId, ids.raceId, `error=${encodeURIComponent("Invalid fleet settings.")}`),
+    );
+  }
+
+  if (!ids.courseLetter) {
+    redirect(
+      trackAnalysisPath(
+        ids.groupId,
+        ids.seriesId,
+        ids.raceId,
+        `fleet=${encodeURIComponent(ids.raceFleetId)}&error=${encodeURIComponent("Select a course letter before saving.")}`,
+      ),
+    );
+  }
+
+  const { supabase, user } = await requireRaceStaff(ids.groupId, ids.raceId);
+
+  const { data: fleet } = await supabase
+    .from("race_fleets")
+    .select("id")
+    .eq("id", ids.raceFleetId)
+    .eq("race_id", ids.raceId)
+    .maybeSingle();
+
+  if (!fleet) {
+    redirect(
+      trackAnalysisPath(ids.groupId, ids.seriesId, ids.raceId, `error=${encodeURIComponent("Fleet not found for this race.")}`),
+    );
+  }
+
+  const settings = await persistRaceFleetAnalysisSettings(supabase, {
+    ...ids,
+    ...parsed,
+  });
+  if (!settings) {
+    redirect(
+      trackAnalysisPath(ids.groupId, ids.seriesId, ids.raceId, `error=${encodeURIComponent("Could not save fleet settings.")}`),
+    );
+  }
+
+  const { data: submissions } = await supabase
+    .from("race_track_submissions")
+    .select("id, user_id, race_id, race_entry_id, boat_id, track_source, external_activity_id, storage_path")
+    .eq("race_id", ids.raceId)
+    .eq("analysis_mode", "collated")
+    .in("status", ["pending_ro", "ready"]);
+
+  const { analysed, skipped } = await runCollatedAnalysisForFleet(supabase, {
+    groupId: ids.groupId,
+    raceId: ids.raceId,
+    raceFleetId: ids.raceFleetId,
+    settings,
+    submissions: submissions ?? [],
+    confirmedByUserId: user.id,
+  });
+
+  revalidatePath("/tracks");
+  revalidatePath("/");
+  revalidatePath(trackAnalysisPath(ids.groupId, ids.seriesId, ids.raceId));
+  const query = new URLSearchParams({
+    fleet: ids.raceFleetId,
+    analysis_ready: "1",
+    analysed: String(analysed),
+  });
+  if (skipped > 0) query.set("skipped", String(skipped));
+  redirect(trackAnalysisPath(ids.groupId, ids.seriesId, ids.raceId, query.toString()));
 }
 
 /** @deprecated Use saveRaceFleetAnalysisSettingsAction */
@@ -157,7 +268,7 @@ export async function confirmRaceFleetAnalysisAction(formData: FormData) {
     .select("id, user_id, race_id, race_entry_id, boat_id, track_source, external_activity_id, storage_path")
     .eq("race_id", raceId)
     .eq("analysis_mode", "collated")
-    .eq("status", "pending_ro");
+    .in("status", ["pending_ro", "ready"]);
 
   const { analysed } = await runCollatedAnalysisForFleet(supabase, {
     groupId,
@@ -200,7 +311,7 @@ export async function confirmAllRaceFleetAnalysisAction(formData: FormData) {
     .select("id, user_id, race_id, race_entry_id, boat_id, track_source, external_activity_id, storage_path")
     .eq("race_id", raceId)
     .eq("analysis_mode", "collated")
-    .eq("status", "pending_ro");
+    .in("status", ["pending_ro", "ready"]);
 
   let totalAnalysed = 0;
   const missingCourse: string[] = [];

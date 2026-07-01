@@ -17,8 +17,7 @@ import {
 } from "@/components/sailing-analysis/setup-course-map-section";
 import { buildRoCourseSetupJson } from "@/components/sailing-analysis/ro-course-setup-helpers";
 import {
-  confirmRaceFleetAnalysisAction,
-  saveRaceFleetAnalysisSettingsAction,
+  saveAndAnalyseRaceFleetAnalysisAction,
 } from "@/app/actions/race-track-analysis";
 import { DETECTION_DEFAULTS } from "@/lib/sailing-analysis";
 import type { MarkOverride, SailingCourseRow, SailingMarkRow } from "@/lib/sailing-analysis/types";
@@ -94,7 +93,7 @@ export function RoTrackAnalysisFleetPanel({
 
   const previewTrack = fleetTracks[0]?.points ?? [];
   const previewWind = wind.trim() ? Number(wind) : null;
-  const hasSavedCourse = Boolean(savedSettings?.course_letter);
+  const hasCollatedTracks = totalCollated > 0;
 
   function onCourseLetterChange(next: string) {
     setCourseLetter(next);
@@ -148,7 +147,7 @@ export function RoTrackAnalysisFleetPanel({
         </p>
       )}
 
-      <form action={saveRaceFleetAnalysisSettingsAction} className="flex flex-col gap-6">
+      <form action={saveAndAnalyseRaceFleetAnalysisAction} className="flex flex-col gap-6">
         <input type="hidden" name="group_id" value={groupId} />
         <input type="hidden" name="race_id" value={raceId} />
         <input type="hidden" name="series_id" value={seriesId} />
@@ -219,29 +218,27 @@ export function RoTrackAnalysisFleetPanel({
 
         <button
           type="submit"
-          className="self-start rounded-lg border border-splice-navy px-4 py-2 text-sm font-medium text-splice-navy dark:border-splice-foam dark:text-splice-foam"
+          disabled={!courseLetter}
+          className="self-start rounded-lg bg-splice-navy px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-splice-foam dark:text-splice-navy"
         >
-          Save {fleet.name} settings
+          {hasCollatedTracks
+            ? `Save & analyse ${fleet.name}`
+            : `Save ${fleet.name} settings`}
         </button>
-      </form>
-
-      <form action={confirmRaceFleetAnalysisAction}>
-        <input type="hidden" name="group_id" value={groupId} />
-        <input type="hidden" name="race_id" value={raceId} />
-        <input type="hidden" name="series_id" value={seriesId} />
-        <input type="hidden" name="race_fleet_id" value={fleet.id} />
-        <button
-          type="submit"
-          disabled={!hasSavedCourse && !courseLetter}
-          className="rounded-lg bg-splice-navy px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-splice-foam dark:text-splice-navy"
-        >
-          Analyse {fleet.name} tracks
-        </button>
-        {!hasSavedCourse ? (
-          <p className="mt-2 text-xs text-splice-ocean dark:text-splice-water">
-            Save course and laps for this fleet first.
+        {!courseLetter ? (
+          <p className="text-xs text-splice-ocean dark:text-splice-water">
+            Select a course letter first.
           </p>
-        ) : null}
+        ) : hasCollatedTracks ? (
+          <p className="text-xs text-splice-ocean dark:text-splice-water">
+            Saves your settings and runs analysis on all collated tracks in this fleet
+            {readyCount > 0 ? " (including re-analysis of tracks already processed)" : ""}.
+          </p>
+        ) : (
+          <p className="text-xs text-splice-ocean dark:text-splice-water">
+            Preset course and mark positions — analysis runs automatically when you click this after tracks arrive.
+          </p>
+        )}
       </form>
     </div>
   );

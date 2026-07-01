@@ -38,6 +38,7 @@ type Props = {
     analysis_ready?: string;
     fleet?: string;
     analysed?: string;
+    skipped?: string;
     fleets_synced?: string;
   }>;
 };
@@ -206,9 +207,12 @@ export default async function RoTrackAnalysisPage({ params, searchParams }: Prop
         ) : null}
         {q.analysis_ready === "1" ? (
           <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-            Track analysis complete
-            {q.analysed ? ` — ${q.analysed} track${q.analysed === "1" ? "" : "s"} processed` : ""}. Sailors are
-            notified on their home page.
+            Settings saved — track analysis complete
+            {q.analysed ? ` (${q.analysed} track${q.analysed === "1" ? "" : "s"} processed` : ""}
+            {q.skipped && q.skipped !== "0"
+              ? `; ${q.skipped} skipped (insufficient GPS or not in this fleet)`
+              : ""}
+            ). Sailors are notified on their home page.
           </p>
         ) : null}
         {fleetsSyncedOnLoad || q.fleets_synced ? (
