@@ -9,6 +9,8 @@ export {
   WSC_MARKS,
   WSC_COURSES,
   cropTrackPoints,
+  computeStartLineOverviewBadges,
+  findFinishLineCrossingUnix,
   parseHMS,
   formatHMS,
   destinationPoint,
@@ -39,6 +41,7 @@ export * from "./geo-heading";
 export * from "./manoeuvre-wind-crossing";
 export * from "./course-rounding-sequence";
 export * from "./course-mark-entries";
+export * from "./analysis-race-timing";
 export * from "./wsc-seed";
 
 export type { AnalysisRunInput } from "./run-analysis-wrapper";

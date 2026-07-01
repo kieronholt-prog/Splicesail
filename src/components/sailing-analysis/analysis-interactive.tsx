@@ -11,6 +11,12 @@ import type { AnalysisSnapshot, StartFinishLineEnds } from "@/lib/sailing-analys
 import type { MarkOverride, SailingCourseRow, SailingMarkRow } from "@/lib/sailing-analysis/types";
 import { buildMapMarksWithSfEnds, buildCourseLinePoints } from "@/lib/sailing-analysis/map-display";
 import { buildGateOverlayFC } from "@/lib/sailing-analysis/gate-overlay";
+import { WindRose } from "@/components/sailing-analysis/wind-rose";
+import {
+  spliceFieldClass,
+  spliceFieldHintClass,
+  spliceFieldLabelClass,
+} from "@/components/sailing-analysis/form-field-classes";
 
 export function AnalysisInteractive({
   submissionId,
@@ -23,6 +29,7 @@ export function AnalysisInteractive({
   initialMarkOverrides,
   initialCourseSetup,
   trackPoints,
+  collatedPreset = false,
 }: {
   submissionId: string;
   snapshot: AnalysisSnapshot;
@@ -34,13 +41,22 @@ export function AnalysisInteractive({
   initialMarkOverrides: Record<string, MarkOverride>;
   initialCourseSetup: Record<string, unknown> | null;
   trackPoints: { lat: number; lon: number; time?: number | null }[];
+  /** RO has set course/wind — sailor may fine-tune marks, wind, and GPS offset. */
+  collatedPreset?: boolean;
 }) {
-  const [editMarks, setEditMarks] = useState(false);
+  const [showAdjustments, setShowAdjustments] = useState(false);
   const [markOverrides, setMarkOverrides] = useState(initialMarkOverrides);
   const [sfEnds, setSfEnds] = useState<StartFinishLineEnds>(() =>
     initialSfLineEnds(initialCourseSetup),
   );
   const [windOverride, setWindOverride] = useState<number | null>(windDirection ?? snapshot.windDir ?? null);
+  const [gpsToBowM, setGpsToBowM] = useState(
+    String(
+      initialCourseSetup?.gpsToBowM ??
+        snapshot.gpsToBowM ??
+        2,
+    ),
+  );
 
   const courseSetup = useMemo(
     () => ({
@@ -55,8 +71,9 @@ export function AnalysisInteractive({
             ? Number(initialCourseSetup.raceStartSec)
             : null,
       }),
+      gpsToBowM: Number(gpsToBowM) > 0 ? Number(gpsToBowM) : 2,
     }),
-    [initialCourseSetup, sfEnds],
+    [initialCourseSetup, sfEnds, gpsToBowM],
   );
 
   const mapMarks = useMemo(
@@ -68,32 +85,67 @@ export function AnalysisInteractive({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => setEditMarks((v) => !v)}
-          className="rounded-lg border border-splice-navy px-3 py-1.5 text-sm font-medium text-splice-navy dark:border-splice-foam dark:text-splice-foam"
-        >
-          {editMarks ? "Done adjusting marks" : "Adjust marks & re-run"}
-        </button>
-        {editMarks ? (
-          <form action={rerunTrackAnalysisAction} className="flex flex-wrap items-center gap-2">
-            <input type="hidden" name="submission_id" value={submissionId} />
-            <input type="hidden" name="mark_overrides" value={JSON.stringify(markOverrides)} />
-            <input type="hidden" name="course_setup" value={JSON.stringify(courseSetup)} />
-            <input type="hidden" name="wind_direction" value={windOverride ?? ""} />
-            <input type="hidden" name="det_settings" value={JSON.stringify(DETECTION_DEFAULTS)} />
-            <button
-              type="submit"
-              className="rounded-lg bg-splice-navy px-4 py-1.5 text-sm font-medium text-white dark:bg-splice-foam dark:text-splice-navy"
-            >
-              Re-run analysis
-            </button>
-          </form>
-        ) : null}
+      {collatedPreset ? (
+        <p className="rounded-lg border border-splice-sky/80 bg-splice-sky/10 px-3 py-2 text-sm text-splice-navy dark:border-splice-ocean dark:bg-splice-navy-light/30 dark:text-splice-foam">
+          Course and laps were set by the race officer. You can adjust wind direction, mark positions,
+          committee line, and GPS-to-bow offset below, then re-run analysis.
+        </p>
+      ) : null}
+
+      <div className="rounded-lg border border-splice-sky p-4 dark:border-splice-ocean">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-splice-navy dark:text-splice-foam">Your adjustments</p>
+            <p className="mt-1 text-xs text-splice-ocean dark:text-splice-water">
+              Wind changes VMG overlays immediately; re-run to update legs and race timing.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAdjustments((v) => !v)}
+            className="rounded-lg border border-splice-navy px-3 py-1.5 text-sm font-medium text-splice-navy dark:border-splice-foam dark:text-splice-foam"
+          >
+            {showAdjustments ? "Hide map" : "Adjust course & wind"}
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_140px]">
+          <WindRose
+            windDeg={Math.round(effWind)}
+            onChange={setWindOverride}
+            compact
+          />
+          <label className="flex flex-col gap-1">
+            <span className={spliceFieldLabelClass}>GPS to bow (m)</span>
+            <input
+              type="number"
+              min={0}
+              max={20}
+              step={0.5}
+              value={gpsToBowM}
+              onChange={(e) => setGpsToBowM(e.target.value)}
+              className={spliceFieldClass}
+            />
+            <span className={spliceFieldHintClass}>Antenna offset for start-line position</span>
+          </label>
+        </div>
+
+        <form action={rerunTrackAnalysisAction} className="mt-4 flex flex-wrap items-center gap-3">
+          <input type="hidden" name="submission_id" value={submissionId} />
+          <input type="hidden" name="mark_overrides" value={JSON.stringify(markOverrides)} />
+          <input type="hidden" name="course_setup" value={JSON.stringify(courseSetup)} />
+          <input type="hidden" name="wind_direction" value={windOverride ?? ""} />
+          <input type="hidden" name="det_settings" value={JSON.stringify(DETECTION_DEFAULTS)} />
+          <button
+            type="submit"
+            className="rounded-lg bg-splice-navy px-4 py-2 text-sm font-medium text-white dark:bg-splice-foam dark:text-splice-navy"
+          >
+            Re-run analysis
+          </button>
+        </form>
       </div>
 
-      {editMarks ? (
+      {showAdjustments ? (
         <SetupCourseMapSection
           clubMarks={clubMarks}
           course={course}

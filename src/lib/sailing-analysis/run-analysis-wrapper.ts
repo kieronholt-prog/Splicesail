@@ -1,8 +1,6 @@
 import {
-  cropTrackPoints,
+  computeStartLineOverviewBadges,
   DEFAULT_SF_LINE_ENDS,
-  DETECTION_DEFAULTS,
-  runAnalysis,
 } from "./engine-core";
 import type { DetectionSettings } from "./types";
 import { buildWindTuningFromCourse } from "./course-wind-baseline";
@@ -10,9 +8,15 @@ import {
   buildMarkPositionsFromClubData,
   buildResolvedCourseMarks,
   startFinishLineFromSetup,
-  type ResolvedMarkPosition,
 } from "./course-resolve";
 import type { MarkOverride, SailingCourseRow, SailingMarkRow, TrackPoint } from "./types";
+import {
+  runAnalysisWithRaceCrop,
+  type StartLineBadges,
+} from "./analysis-race-timing";
+
+export type { StartLineBadges };
+export { formatRaceElapsed, formatStartLineDistance } from "./analysis-race-timing";
 
 export type AnalysisRunInput = {
   points: TrackPoint[];
@@ -27,14 +31,20 @@ export type AnalysisRunInput = {
   windwardMarkName?: string | null;
 };
 
+function effectiveMarksMap(
+  marks: SailingMarkRow[],
+  course: SailingCourseRow | null,
+  markOverrides: Record<string, MarkOverride>,
+): Record<string, { lat: number; lon: number }> {
+  const resolved = buildResolvedCourseMarks(marks, course, markOverrides);
+  const out: Record<string, { lat: number; lon: number }> = {};
+  for (const m of resolved) out[m.name] = { lat: m.lat, lon: m.lon };
+  return out;
+}
+
 export function executeAnalysis(input: AnalysisRunInput) {
   let courseSetup = { ...(input.courseSetup ?? {}) };
-  const cropStartSec = Number(courseSetup.cropStartSec ?? 0);
-  const cropDurationSec = Number(courseSetup.cropDurationSec ?? 0);
-  let pts = input.points;
-  if (cropDurationSec > 0) {
-    pts = cropTrackPoints(pts, cropStartSec, cropDurationSec);
-  }
+  const pts = input.points;
   if (!pts || pts.length < 20) return null;
 
   const firstT = pts[0]?.time;
@@ -63,29 +73,64 @@ export function executeAnalysis(input: AnalysisRunInput) {
     input.windwardMarkName ??
     null;
 
-  const windTuning = buildWindTuningFromCourse(
-    resolvedMarks,
-    windward,
-    input.laps ?? 1,
-  );
+  const windTuning = buildWindTuningFromCourse(resolvedMarks, windward, input.laps ?? 1);
+  const gpsToBowM =
+    Number(courseSetup.gpsToBowM) > 0
+      ? Number(courseSetup.gpsToBowM)
+      : (input.gpsToBowM ?? 2);
+  const effMarks = effectiveMarksMap(input.marks, input.course, input.markOverrides ?? {});
 
-  return runAnalysis(
-    pts as never,
-    (input.userWind ?? null) as never,
-    markPositions as never,
-    input.laps ?? 1,
-    preamble as never,
-    (input.detSettings ?? DETECTION_DEFAULTS) as never,
-    sfLine as never,
-    windTuning as never,
-    input.gpsToBowM ?? 2,
-    windward as never,
-    null,
-    resolvedMarks as never,
-  );
+  const raced = runAnalysisWithRaceCrop(pts as never, {
+    userWind: input.userWind ?? null,
+    markPositions: markPositions as never,
+    laps: input.laps ?? 1,
+    preamble: preamble as never,
+    detSettings: (input.detSettings) as never,
+    startFinishLine: sfLine,
+    windTuning: windTuning as never,
+    gpsToBowM,
+    windwardMarkName: windward,
+    resolvedCourseMarks: resolvedMarks as never,
+    courseSetup,
+    courseLetter: input.course?.course_letter ?? null,
+    effectiveMarks: effMarks,
+  });
+  if (!raced) return null;
+
+  const { results, fullResults, gunUnix, finishUnix, raceElapsedSec, crop } = raced;
+
+  let startLine: StartLineBadges | null = null;
+  if (gunUnix != null && sfLine?.endA && sfLine?.endB) {
+    startLine = computeStartLineOverviewBadges(
+      results as never,
+      fullResults as never,
+      sfLine as never,
+      gunUnix,
+      input.course?.course_letter ?? null,
+      effMarks as never,
+      gpsToBowM,
+      (courseSetup.raceStartSec != null ? Number(courseSetup.raceStartSec) : null) as never,
+      (windward ?? null) as never,
+    ) as StartLineBadges | null;
+  }
+
+  return {
+    ...results,
+    startLine,
+    stats: {
+      ...(results.stats ?? {}),
+      raceElapsedSec,
+      finishUnix,
+      gunUnix,
+      trackCropApplied: crop.applied,
+      trackDurationSec: results.stats?.duration ?? null,
+      duration: raceElapsedSec ?? results.stats?.duration ?? null,
+    },
+    gpsToBowM,
+  };
 }
 
-export function serializeAnalysisForDb(results: NonNullable<ReturnType<typeof runAnalysis>>) {
+export function serializeAnalysisForDb(results: NonNullable<ReturnType<typeof executeAnalysis>>) {
   return {
     stats: results.stats ?? {},
     tack_scores: (results.tacks ?? []).map((t: Record<string, unknown>) => ({
@@ -116,6 +161,7 @@ export function serializeAnalysisForDb(results: NonNullable<ReturnType<typeof ru
       avgVmgToWind: l.avgVmgToWind,
       efficiency: l.efficiency,
       duration: l.duration,
+      startLineDistanceM: l.startLineDistanceM,
     })),
     wind_direction: results.windDir ?? null,
     analysis_snapshot: JSON.parse(JSON.stringify(results)),

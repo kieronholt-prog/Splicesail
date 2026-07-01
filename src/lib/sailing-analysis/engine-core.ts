@@ -2394,6 +2394,26 @@ function gatingRowJSON(row){
     return s.length>2500?s.slice(0,2500)+"\u2026":s;
   }catch(_){ return"{}";}
 }
+
+/** Unix time when the boat crosses the finish committee line. */
+function findFinishLineCrossingUnix(pts,sfEnds,legs){
+  if(!pts?.length||!sfEnds?.endA||!sfEnds?.endB)return null;
+  const e0=sfEnds.endA,e1=sfEnds.endB;
+  const finishLeg=(legs||[]).find(l=>String(l.to||"")==="FINISH");
+  if(finishLeg?.endIdx!=null&&finishLeg.endIdx>=1){
+    const j=finishLeg.endIdx|0;
+    const t=interpolatedCommitteeLineCrossingTime(pts,j,e0,e1);
+    if(t!=null&&Number.isFinite(t))return t;
+    const pt=pts[j];
+    if(pt?.time!=null)return pt.time;
+  }
+  const lastNonFinish=(legs||[]).filter(l=>String(l.to||"")!=="FINISH").pop();
+  const fromIdx=Math.max(1,lastNonFinish?.endIdx??0);
+  const crosses=detectLineCrossings(pts,e0,e1).filter(c=>c.idx>=fromIdx&&Number.isFinite(c.time));
+  if(crosses.length)return crosses[crosses.length-1].time;
+  return null;
+}
+
 function computeStartLineOverviewBadges(distAnalysis,seriesAnalysis,sfEnds,tSignalAbs,courseLetter,effectiveMarks,gpsToBowM,raceClockSec=null,firstMarkRefName=null){
   const r=computeStartLineDetails(distAnalysis,seriesAnalysis,sfEnds,tSignalAbs,courseLetter,effectiveMarks,gpsToBowM,raceClockSec,firstMarkRefName);
   return r?r.badges:null;
@@ -4008,4 +4028,6 @@ export {
   TRACK_LEG_SEGMENT_PALETTE,
   TRACK_LEG_SKIP_COLOR,
   MAP_RND_BISECTOR_LINE,
+  computeStartLineOverviewBadges,
+  findFinishLineCrossingUnix,
 };

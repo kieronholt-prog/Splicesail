@@ -85,7 +85,11 @@ export function AnalysisView({
       {tab === "overview" ? (
         <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
           <div className="flex flex-col gap-6">
-            <AnalysisResultsSummary stats={stats} windDirection={effWind} />
+            <AnalysisResultsSummary
+              stats={stats as never}
+              windDirection={effWind}
+              startLine={snapshot.startLine ?? (stats.startLine as never) ?? null}
+            />
             {snapshot.upwindByTack ? (
               <UpwindByTackPanel upwindByTack={snapshot.upwindByTack as Record<string, unknown>} windDeg={effWind} />
             ) : null}

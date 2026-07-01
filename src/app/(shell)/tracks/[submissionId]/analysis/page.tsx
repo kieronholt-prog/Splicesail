@@ -114,6 +114,7 @@ export default async function TrackAnalysisPage({ params, searchParams }: Props)
             initialMarkOverrides={markOverrides}
             initialCourseSetup={courseSetup}
             trackPoints={trackPoints}
+            collatedPreset={sub.analysis_mode === "collated"}
           />
         </div>
 

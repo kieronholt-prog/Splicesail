@@ -63,6 +63,7 @@ export type AnalysisLeg = {
   chordProgressKts?: number;
   legBearing?: number;
   roundingM?: number;
+  startLineDistanceM?: number;
 };
 
 export type AnalysisSnapshot = {
@@ -77,6 +78,13 @@ export type AnalysisSnapshot = {
   markRoundingDetails?: Record<string, unknown>[];
   speedTL?: { time: number; speed: number; cog?: number }[];
   windTrace?: { time: number; dir: number }[];
+  startLine?: {
+    hasLine?: boolean;
+    distM?: number | null;
+    timeDeltaSec?: number | null;
+    speedPct?: number | null;
+  } | null;
+  gpsToBowM?: number;
 };
 
 export type StartFinishLineEnds = {
