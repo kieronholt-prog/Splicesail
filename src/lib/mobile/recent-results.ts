@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { formatRaceElapsedOrCorrectedHms } from "@/lib/club-display-format";
 import { resolveClubIanaTimeZone } from "@/lib/club-time";
+import { loadUserTrackLinks, resolveTrackLink } from "@/lib/mobile/track-submissions";
 import { raceTypeUsesPositionalScoring, normalizeRaceType } from "@/lib/race-type";
 
 export type MobileRecentResultRow = {
@@ -89,19 +90,7 @@ export async function loadMobileRecentResults(
 
   if (error || !entryRows?.length) return [];
 
-  const entryIds = entryRows.map((r) => r.id);
-  const { data: trackRows } = await supabase
-    .from("race_track_submissions")
-    .select("id, race_entry_id, status")
-    .eq("user_id", userId)
-    .in("race_entry_id", entryIds)
-    .neq("status", "cancelled");
-
-  const trackByEntryId = new Map<string, { id: string; status: string }>();
-  for (const t of trackRows ?? []) {
-    if (!t.race_entry_id) continue;
-    trackByEntryId.set(t.race_entry_id, { id: t.id, status: t.status });
-  }
+  const trackLinks = await loadUserTrackLinks(userId);
 
   const seenRaceIds = new Set<string>();
   const results: MobileRecentResultRow[] = [];
@@ -172,7 +161,7 @@ export async function loadMobileRecentResults(
         | { default_sail_number: string | null; label: string | null }[]
         | null,
     );
-    const track = trackByEntryId.get(row.id);
+    const track = resolveTrackLink(trackLinks, row.id, race.id, row.boat_id);
     const raceType = race.race_type ?? "handicap";
 
     results.push({

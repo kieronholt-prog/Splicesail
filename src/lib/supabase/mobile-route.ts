@@ -29,6 +29,11 @@ export async function authenticateMobileRequest(
 
   const { url, anonKey } = supabaseEnv();
   const supabase = createClient(url, anonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
     global: { headers: { Authorization: `Bearer ${token}` } },
   });
 

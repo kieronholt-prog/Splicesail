@@ -31,9 +31,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ ok: true, submission: detail });
     }
 
-    const limit = Math.min(60, Math.max(1, Number(url.searchParams.get("limit") ?? 60) || 60));
+    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") ?? 100) || 100));
     const submissions = await loadMobileTrackSubmissions(auth.supabase, auth.userId, limit);
-    return NextResponse.json({ ok: true, submissions });
+    return NextResponse.json({ ok: true, submissions, count: submissions.length });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
     return NextResponse.json({ ok: false, error: message }, { status: 500 });

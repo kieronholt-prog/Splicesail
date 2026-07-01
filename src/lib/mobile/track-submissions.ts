@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export type MobileTrackSubmissionRow = {
   id: string;
@@ -7,6 +8,7 @@ export type MobileTrackSubmissionRow = {
   activityEndedAt: string;
   status: string;
   analysisMode: string | null;
+  trackSource: string;
   raceId: string | null;
   raceEntryId: string | null;
   raceName: string | null;
@@ -34,36 +36,74 @@ function num(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Verified mobile reads — service role scoped to JWT user id (same rows as web /tracks). */
+function mobileTrackClient(): SupabaseClient {
+  return createAdminClient();
+}
+
+type TrackRow = {
+  id: string;
+  activity_name: string | null;
+  activity_started_at: string;
+  activity_ended_at: string;
+  status: string;
+  analysis_mode: string | null;
+  track_source: string;
+  race_id: string | null;
+  race_entry_id: string | null;
+};
+
+async function loadRaceLabels(
+  client: SupabaseClient,
+  raceIds: string[],
+): Promise<Map<string, { raceName: string | null; seriesName: string | null }>> {
+  const out = new Map<string, { raceName: string | null; seriesName: string | null }>();
+  if (!raceIds.length) return out;
+
+  const { data: raceRows, error } = await client
+    .from("races")
+    .select("id, name, series ( name )")
+    .in("id", raceIds);
+
+  if (error) {
+    console.error("loadMobileTrackSubmissions race labels:", error.message);
+    return out;
+  }
+
+  for (const row of raceRows ?? []) {
+    const series = unwrapOne(row.series as { name?: string } | { name?: string }[] | null);
+    out.set(row.id, {
+      raceName: row.name ?? null,
+      seriesName: series?.name ?? null,
+    });
+  }
+  return out;
+}
+
 export async function loadMobileTrackSubmissions(
-  supabase: SupabaseClient,
+  _supabase: SupabaseClient,
   userId: string,
-  limit = 60,
+  limit = 100,
 ): Promise<MobileTrackSubmissionRow[]> {
-  const { data: rows, error } = await supabase
+  const client = mobileTrackClient();
+  const { data: rows, error } = await client
     .from("race_track_submissions")
     .select(
-      `
-      id,
-      activity_name,
-      activity_started_at,
-      activity_ended_at,
-      status,
-      analysis_mode,
-      race_id,
-      race_entry_id,
-      races ( name, series ( name ) )
-    `,
+      "id, activity_name, activity_started_at, activity_ended_at, status, analysis_mode, track_source, race_id, race_entry_id",
     )
     .eq("user_id", userId)
     .neq("status", "cancelled")
-    .order("activity_started_at", { ascending: false, nullsFirst: false })
+    .order("activity_started_at", { ascending: false })
     .limit(limit);
 
   if (error) {
     console.error("loadMobileTrackSubmissions:", error.message);
-    return [];
+    throw new Error(error.message);
   }
   if (!rows?.length) return [];
+
+  const raceIds = [...new Set(rows.map((r) => r.race_id).filter(Boolean))] as string[];
+  const raceLabels = await loadRaceLabels(client, raceIds);
 
   const readyIds = rows.filter((r) => r.status === "ready").map((r) => r.id);
   const analysisBySubmissionId = new Map<
@@ -72,7 +112,7 @@ export async function loadMobileTrackSubmissions(
   >();
 
   if (readyIds.length > 0) {
-    const { data: analysisRows, error: analysisErr } = await supabase
+    const { data: analysisRows, error: analysisErr } = await client
       .from("race_track_analyses")
       .select("submission_id, stats, leg_summary, wind_direction")
       .in("submission_id", readyIds);
@@ -88,72 +128,21 @@ export async function loadMobileTrackSubmissions(
     }
   }
 
-  return rows.map((row) => {
-    const analysis = analysisBySubmissionId.get(row.id);
-    const stats = (analysis?.stats ?? {}) as Record<string, unknown>;
-    const legs = Array.isArray(analysis?.leg_summary) ? analysis.leg_summary : [];
-    const race = unwrapOne(row.races as { name?: string; series?: { name?: string } | null } | null);
-    const series = unwrapOne(race?.series ?? null);
-
-    return {
-      id: row.id,
-      activityName: row.activity_name,
-      activityStartedAt: row.activity_started_at,
-      activityEndedAt: row.activity_ended_at,
-      status: row.status,
-      analysisMode: row.analysis_mode,
-      raceId: row.race_id,
-      raceEntryId: row.race_entry_id,
-      raceName: race?.name ?? null,
-      seriesName: series?.name ?? null,
-      durationSeconds: num(stats.duration),
-      windDirection: analysis?.wind_direction ?? num(stats.windDir),
-      legCount: legs.length || null,
-      tackCount: num(stats.tackCount),
-      gybeCount: num(stats.gybeCount),
-    };
-  });
+  return rows.map((row) => mapTrackRow(row, raceLabels, analysisBySubmissionId));
 }
 
-export async function loadMobileTrackSubmissionDetail(
-  supabase: SupabaseClient,
-  userId: string,
-  submissionId: string,
-  appOrigin: string,
-): Promise<MobileTrackSubmissionDetail | null> {
-  const { data: row, error } = await supabase
-    .from("race_track_submissions")
-    .select(
-      `
-      id,
-      activity_name,
-      activity_started_at,
-      activity_ended_at,
-      status,
-      analysis_mode,
-      race_id,
-      race_entry_id,
-      races ( name, series ( name ) ),
-      race_track_analyses ( stats, leg_summary, wind_direction )
-    `,
-    )
-    .eq("id", submissionId)
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error || !row) return null;
-
-  const analysis = unwrapOne(
-    row.race_track_analyses as
-      | { stats?: Record<string, unknown>; leg_summary?: unknown[]; wind_direction?: number | null }
-      | null,
-  );
-  const race = unwrapOne(row.races as { name?: string; series?: { name?: string } | null } | null);
-  const series = unwrapOne(race?.series ?? null);
+function mapTrackRow(
+  row: TrackRow,
+  raceLabels: Map<string, { raceName: string | null; seriesName: string | null }>,
+  analysisBySubmissionId: Map<
+    string,
+    { stats?: Record<string, unknown>; leg_summary?: unknown[]; wind_direction?: number | null }
+  >,
+): MobileTrackSubmissionRow {
+  const analysis = analysisBySubmissionId.get(row.id);
   const stats = (analysis?.stats ?? {}) as Record<string, unknown>;
-  const legSummary = Array.isArray(analysis?.leg_summary)
-    ? (analysis.leg_summary as Record<string, unknown>[])
-    : [];
+  const legs = Array.isArray(analysis?.leg_summary) ? analysis.leg_summary : [];
+  const labels = row.race_id ? raceLabels.get(row.race_id) : undefined;
 
   return {
     id: row.id,
@@ -162,19 +151,120 @@ export async function loadMobileTrackSubmissionDetail(
     activityEndedAt: row.activity_ended_at,
     status: row.status,
     analysisMode: row.analysis_mode,
+    trackSource: row.track_source,
     raceId: row.race_id,
     raceEntryId: row.race_entry_id,
-    raceName: race?.name ?? null,
-    seriesName: series?.name ?? null,
+    raceName: labels?.raceName ?? null,
+    seriesName: labels?.seriesName ?? null,
     durationSeconds: num(stats.duration),
     windDirection: analysis?.wind_direction ?? num(stats.windDir),
-    legCount: legSummary.length || null,
+    legCount: legs.length || null,
     tackCount: num(stats.tackCount),
     gybeCount: num(stats.gybeCount),
+  };
+}
+
+export async function loadMobileTrackSubmissionDetail(
+  _supabase: SupabaseClient,
+  userId: string,
+  submissionId: string,
+  appOrigin: string,
+): Promise<MobileTrackSubmissionDetail | null> {
+  const client = mobileTrackClient();
+  const { data: row, error } = await client
+    .from("race_track_submissions")
+    .select(
+      "id, activity_name, activity_started_at, activity_ended_at, status, analysis_mode, track_source, race_id, race_entry_id",
+    )
+    .eq("id", submissionId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("loadMobileTrackSubmissionDetail:", error.message);
+    throw new Error(error.message);
+  }
+  if (!row) return null;
+
+  const raceLabels = row.race_id
+    ? await loadRaceLabels(client, [row.race_id])
+    : new Map<string, { raceName: string | null; seriesName: string | null }>();
+
+  const analysisBySubmissionId = new Map<
+    string,
+    { stats?: Record<string, unknown>; leg_summary?: unknown[]; wind_direction?: number | null }
+  >();
+
+  if (row.status === "ready") {
+    const { data: analysisRow, error: analysisErr } = await client
+      .from("race_track_analyses")
+      .select("submission_id, stats, leg_summary, wind_direction")
+      .eq("submission_id", submissionId)
+      .maybeSingle();
+
+    if (analysisErr) {
+      console.error("loadMobileTrackSubmissionDetail analysis:", analysisErr.message);
+    } else if (analysisRow?.submission_id) {
+      analysisBySubmissionId.set(analysisRow.submission_id, analysisRow);
+    }
+  }
+
+  const summary = mapTrackRow(row, raceLabels, analysisBySubmissionId);
+  const analysis = analysisBySubmissionId.get(row.id);
+  const stats = (analysis?.stats ?? {}) as Record<string, unknown>;
+  const legSummary = Array.isArray(analysis?.leg_summary)
+    ? (analysis.leg_summary as Record<string, unknown>[])
+    : [];
+
+  return {
+    ...summary,
     legSummary,
     stats,
     analysisUrl: `${appOrigin.replace(/\/$/, "")}/tracks/${submissionId}/analysis`,
   };
+}
+
+/** Index track submissions for results linking (Strava + upload). */
+export async function loadUserTrackLinks(userId: string): Promise<{
+  byEntryId: Map<string, { id: string; status: string }>;
+  byRaceBoat: Map<string, { id: string; status: string }>;
+}> {
+  const client = mobileTrackClient();
+  const { data: trackRows, error } = await client
+    .from("race_track_submissions")
+    .select("id, race_entry_id, race_id, boat_id, status")
+    .eq("user_id", userId)
+    .neq("status", "cancelled");
+
+  if (error) {
+    console.error("loadUserTrackLinks:", error.message);
+    return { byEntryId: new Map(), byRaceBoat: new Map() };
+  }
+
+  const byEntryId = new Map<string, { id: string; status: string }>();
+  const byRaceBoat = new Map<string, { id: string; status: string }>();
+  for (const t of trackRows ?? []) {
+    const link = { id: t.id, status: t.status };
+    if (t.race_entry_id) {
+      byEntryId.set(t.race_entry_id, link);
+    }
+    if (t.race_id && t.boat_id) {
+      byRaceBoat.set(`${t.race_id}:${t.boat_id}`, link);
+    }
+  }
+  return { byEntryId, byRaceBoat };
+}
+
+export function resolveTrackLink(
+  links: { byEntryId: Map<string, { id: string; status: string }>; byRaceBoat: Map<string, { id: string; status: string }> },
+  raceEntryId: string,
+  raceId: string,
+  boatId: string,
+): { id: string; status: string } | undefined {
+  return (
+    links.byEntryId.get(raceEntryId) ??
+    links.byRaceBoat.get(`${raceId}:${boatId}`)
+  );
 }
 
 export type CreateMobileTrackBody = {
