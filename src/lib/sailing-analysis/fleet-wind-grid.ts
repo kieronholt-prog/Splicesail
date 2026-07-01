@@ -1,4 +1,4 @@
-import { courseDirFromPoint, signedAngleFromWind } from "./geo-heading";
+import { courseDirFromPoint, isUpwindHemisphere, signedAngleFromWind } from "./geo-heading";
 import {
   relativeToWindFrom,
   tackSideFromRelative,
@@ -108,12 +108,26 @@ function vmgToWindKts(sogKts: number, cogDeg: number, windFromDeg: number): numb
 }
 
 /**
- * Wind FROM (°T) from boat course and tack side.
- * Port tack: wind from = COG − TWA; starboard tack: wind from = COG + TWA.
+ * Signed TWA for tack side (+ port, − starboard) — matches `signedAngleFromWind` in geo-heading.
+ * Wind FROM = boat heading − signed TWA (port: heading−TWA, starboard: heading+TWA).
  */
+export function signedTwaForTackSide(acuteTwaDeg: number, side: "P" | "S"): number {
+  return side === "P" ? acuteTwaDeg : -acuteTwaDeg;
+}
+
+/** Wind FROM (°T) = boat heading − signed TWA. */
+export function windFromHeadingAndSignedTwa(headingDeg: number, signedTwaDeg: number): number {
+  return (headingDeg - signedTwaDeg + 360) % 360;
+}
+
+/** Wind FROM from boat course, acute TWA, and tack side (port: COG−TWA, starboard: COG+TWA). */
 export function windFromCogAndTackSide(cogDeg: number, twaDeg: number, side: "P" | "S"): number {
-  if (side === "P") return (cogDeg - twaDeg + 360) % 360;
-  return (cogDeg + twaDeg + 360) % 360;
+  return windFromHeadingAndSignedTwa(cogDeg, signedTwaForTackSide(twaDeg, side));
+}
+
+/** Port / starboard tack from course direction and known wind FROM. */
+export function tackSideFromCourse(cogDeg: number, windFromDeg: number): "P" | "S" {
+  return tackSideFromRelative(relativeToWindFrom(cogDeg, windFromDeg));
 }
 
 /** Tack side immediately after a manoeuvre completes (sailing on this side until next tack). */
@@ -185,22 +199,46 @@ export function likelyTwaFromSnapshot(snapshot: AnalysisSnapshotLike, tackSide: 
   return twaFromTackAngle(tackAngleFromSnapshot(snapshot));
 }
 
-function resolveSegmentTackSide(
+/**
+ * Tack sailed on a between-tack segment.
+ * @param trustWind When true (map display / known analysis wind), course vs wind wins over mismatched labels.
+ */
+export function resolveSegmentTackSide(
   exitTack: ReturnType<typeof extractRacingTackManoeuvres>[0],
   entryTack: ReturnType<typeof extractRacingTackManoeuvres>[0],
   cogDeg: number,
   windFromDeg: number,
+  trustWind = false,
 ): "P" | "S" {
-  let side = tackSideAfterManoeuvre(exitTack, cogDeg, windFromDeg);
+  const fromCourse = tackSideFromCourse(cogDeg, windFromDeg);
+  const fromExit = tackSideAfterManoeuvre(exitTack, cogDeg, windFromDeg);
   const entryBef = entryTack.sideBef === "P" || entryTack.sideBef === "S" ? entryTack.sideBef : null;
-  if (entryBef && entryBef !== side) {
-    if (exitTack.sideAft === "P" || exitTack.sideAft === "S") {
-      side = exitTack.sideAft;
-    } else if (entryBef) {
-      side = entryBef;
-    }
+
+  if (trustWind) {
+    if (exitTack.sideAft === fromCourse) return exitTack.sideAft;
+    if (entryBef === fromCourse) return entryBef;
+    if (fromExit === fromCourse) return fromExit;
+    return fromCourse;
   }
-  return side;
+
+  if (exitTack.sideAft === "P" || exitTack.sideAft === "S") {
+    if (entryBef && entryBef === exitTack.sideAft) return exitTack.sideAft;
+    return exitTack.sideAft;
+  }
+  if (entryBef) return entryBef;
+  return fromExit;
+}
+
+/** True when point is upwind sailing suitable for between-tack wind / map colouring. */
+export function isBetweenTackUpwindSample(
+  cogDeg: number,
+  speedKts: number,
+  windFromDeg: number,
+): boolean {
+  if (!isUpwindHemisphere(cogDeg, windFromDeg)) return false;
+  if (speedKts < MIN_SPEED_KTS) return false;
+  const vmg = vmgToWindKts(speedKts, cogDeg, windFromDeg);
+  return vmg != null && vmg >= MIN_UPWIND_VMG_KTS;
 }
 
 function smallestAngleBetween(a: number, b: number): number {
@@ -226,10 +264,8 @@ export function extractUpwindSamplesBetweenTacks(
   refWindFromDeg: number,
 ): Omit<WindGridSample, "weight">[] {
   const points = snapshot.points ?? [];
-  const legs = snapshot.legs ?? [];
   if (points.length < 3) return [];
 
-  const legTypeAt = buildLegTypeAtIndex(points, legs);
   const tackManoeuvres = extractRacingTackManoeuvres(snapshot.tacks ?? [], points.length);
   if (tackManoeuvres.length < 2) return [];
 
@@ -248,26 +284,25 @@ export function extractUpwindSamplesBetweenTacks(
     for (let i = from + 1; i < to; i++) {
       const p = points[i];
       if (!p || p.lat == null || p.lon == null || p.time == null) continue;
-      if (legTypeAt[i] !== "upwind") continue;
 
       const cog = courseDirFromPoint(p);
       const speedKts = ms2k(Number(p.ss ?? p.sog ?? 0));
-      if (speedKts < MIN_SPEED_KTS) continue;
+      if (!isBetweenTackUpwindSample(cog, speedKts, refWindFromDeg)) continue;
 
-      const vmg = vmgToWindKts(speedKts, cog, refWindFromDeg);
-      if (vmg == null || vmg < MIN_UPWIND_VMG_KTS) continue;
+      const vmg = vmgToWindKts(speedKts, cog, refWindFromDeg)!;
 
       if (!segmentTackSide) {
-        segmentTackSide = resolveSegmentTackSide(exitTack, entryTack, cog, refWindFromDeg);
+        segmentTackSide = resolveSegmentTackSide(exitTack, entryTack, cog, refWindFromDeg, false);
         twaDeg = likelyTwaFromSnapshot(snapshot, segmentTackSide);
       }
 
+      const signedTwa = signedTwaForTackSide(twaDeg!, segmentTackSide);
       out.push({
         lat: p.lat,
         lon: p.lon,
         time: p.time,
         cogDeg: cog,
-        windFromDeg: windFromCogAndTackSide(cog, twaDeg!, segmentTackSide),
+        windFromDeg: windFromHeadingAndSignedTwa(cog, signedTwa),
         speedKts,
         vmgKts: vmg,
         submissionId,

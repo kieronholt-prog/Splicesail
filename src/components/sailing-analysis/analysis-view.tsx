@@ -13,6 +13,7 @@ import { WindRose } from "@/components/sailing-analysis/wind-rose";
 import { useFleetWindGridDisplay } from "@/components/sailing-analysis/use-fleet-wind-grid-display";
 import { WindGridTimeSlider } from "@/components/sailing-analysis/wind-grid-time-slider";
 import type { FleetWindGrid } from "@/lib/sailing-analysis/fleet-wind-grid";
+import { buildUpwindBetweenTackTrackSegmentFC } from "@/lib/sailing-analysis/upwind-tack-track-segments";
 import type { AnalysisSnapshot, StartFinishLineEnds } from "@/lib/sailing-analysis/analysis-types";
 import type { MapMarkDisplay } from "@/lib/sailing-analysis/map-display";
 
@@ -54,6 +55,17 @@ export function AnalysisView({
   const gybes = snapshot.gybes ?? [];
   const points = snapshot.points ?? [];
   const effWind = windOverride ?? windDirection ?? snapshot.windDir ?? 0;
+
+  const upwindTackTrackFC = useMemo(
+    () =>
+      buildUpwindBetweenTackTrackSegmentFC(
+        points,
+        tacks,
+        (snapshot.legs ?? []) as { type?: string; startIdx?: number; endIdx?: number }[],
+        effWind,
+      ),
+    [points, tacks, snapshot.legs, effWind],
+  );
 
   const speedTL = (snapshot.speedTL ?? []) as { time: number; speed: number; cog?: number }[];
   const windTrace = (snapshot.windTrace ?? []) as { time: number; dir: number }[];
@@ -147,6 +159,7 @@ export function AnalysisView({
             draggableAllMarks={false}
             startFinishLine={startFinishLine ?? null}
             trackSegmentFC={snapshot.trackSegmentFC ?? null}
+            upwindTackTrackFC={upwindTackTrackFC}
             legGatesFC={legGatesFC ?? null}
             showMarkGates={showMarkGates}
             manoeuvres={{ tacks, gybes }}

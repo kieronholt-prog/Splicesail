@@ -1,14 +1,18 @@
-import { courseDirFromPoint } from "./geo-heading";
+import { courseDirFromPoint, isUpwindHemisphere } from "./geo-heading";
 import {
-  buildLegTypeAtIndex,
   extractRacingTackManoeuvres,
-  tackSideAfterManoeuvre,
+  resolveSegmentTackSide,
   type AnalysisLeg,
   type AnalysisPoint,
   type AnalysisTack,
 } from "./fleet-wind-grid";
 
 export type UpwindTackPointKind = "upwind_port" | "upwind_stbd";
+
+const UPWIND_PORT_COLOR = "#ff4a6a";
+const UPWIND_STBD_COLOR = "#4aff8a";
+
+export { UPWIND_PORT_COLOR, UPWIND_STBD_COLOR };
 
 /** Per GPS index: upwind tack side between racing tacks, else null. */
 export function buildUpwindBetweenTackPointKinds(
@@ -17,11 +21,11 @@ export function buildUpwindBetweenTackPointKinds(
   legs: AnalysisLeg[],
   windFromDeg: number,
 ): (UpwindTackPointKind | null)[] {
+  void legs;
   const n = points.length;
   const out = new Array<UpwindTackPointKind | null>(n).fill(null);
-  if (n < 3) return out;
+  if (n < 3 || !Number.isFinite(windFromDeg)) return out;
 
-  const legTypeAt = buildLegTypeAtIndex(points, legs);
   const tackManoeuvres = extractRacingTackManoeuvres(tacks, points.length);
   if (tackManoeuvres.length < 2) return out;
 
@@ -34,21 +38,14 @@ export function buildUpwindBetweenTackPointKinds(
 
     const midIdx = Math.min(points.length - 1, Math.floor((from + to) / 2));
     const midCog = courseDirFromPoint(points[midIdx] ?? {});
-    let segmentSide = tackSideAfterManoeuvre(exitTack, midCog, windFromDeg);
-
-    const entrySideBef =
-      entryTack.sideBef === "P" || entryTack.sideBef === "S" ? entryTack.sideBef : null;
-    if (entrySideBef && entrySideBef !== segmentSide) {
-      if (exitTack.sideAft === "P" || exitTack.sideAft === "S") {
-        segmentSide = exitTack.sideAft;
-      } else if (entrySideBef) {
-        segmentSide = entrySideBef;
-      }
-    }
-
+    const segmentSide = resolveSegmentTackSide(exitTack, entryTack, midCog, windFromDeg, true);
     const kind: UpwindTackPointKind = segmentSide === "P" ? "upwind_port" : "upwind_stbd";
+
     for (let i = from + 1; i < to; i++) {
-      if (legTypeAt[i] !== "upwind") continue;
+      const p = points[i];
+      if (!p) continue;
+      const cog = courseDirFromPoint(p);
+      if (!isUpwindHemisphere(cog, windFromDeg)) continue;
       out[i] = kind;
     }
   }
@@ -105,4 +102,17 @@ export function buildUpwindBetweenTackTrackSegmentFC(
   }
 
   return { type: "FeatureCollection", features: feats };
+}
+
+/** Mapbox `line-color` for upwind tack overlay layer. */
+export function mapboxUpwindTackLineColorExpr(): unknown[] {
+  return [
+    "match",
+    ["get", "kind"],
+    "upwind_port",
+    UPWIND_PORT_COLOR,
+    "upwind_stbd",
+    UPWIND_STBD_COLOR,
+    UPWIND_PORT_COLOR,
+  ];
 }

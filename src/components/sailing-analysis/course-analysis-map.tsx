@@ -12,6 +12,7 @@ import { DEFAULT_MAP_CENTER, markBadgeLabel, type MapMarkDisplay } from "@/lib/s
 import type { MapManoeuvres } from "@/lib/sailing-analysis/analysis-types";
 import type { FleetTrackOverlay } from "@/lib/sailing-analysis/load-race-fleet-tracks";
 import { MapSetupLegend } from "@/components/sailing-analysis/map-setup-legend";
+import { mapboxUpwindTackLineColorExpr } from "@/lib/sailing-analysis/upwind-tack-track-segments";
 
 const TRK = "#00d4aa";
 const TRK_ROUND = "#ff9500";
@@ -31,6 +32,7 @@ export type CourseAnalysisMapProps = {
   draggableAllMarks?: boolean;
   startFinishLine?: { endA: { lat: number; lon: number }; endB: { lat: number; lon: number } } | null;
   trackSegmentFC?: GeoJSON.FeatureCollection | { type: string; features: unknown[] } | null;
+  upwindTackTrackFC?: GeoJSON.FeatureCollection | { type: string; features: unknown[] } | null;
   legGatesFC?: GeoJSON.FeatureCollection | { type: string; features: unknown[] } | null;
   showMarkGates?: boolean;
   manoeuvres?: MapManoeuvres | null;
@@ -49,6 +51,7 @@ export function CourseAnalysisMap({
   draggableAllMarks = true,
   startFinishLine,
   trackSegmentFC,
+  upwindTackTrackFC = null,
   legGatesFC,
   showMarkGates = false,
   manoeuvres,
@@ -73,6 +76,11 @@ export function CourseAnalysisMap({
 
   const trackPaintColor = useMemo(
     () => mapboxTrackLineColorByKindExpr(TRK, TRK_ROUND) as mapboxgl.Expression,
+    [],
+  );
+
+  const upwindTackPaintColor = useMemo(
+    () => mapboxUpwindTackLineColorExpr() as mapboxgl.Expression,
     [],
   );
 
@@ -300,6 +308,40 @@ export function CourseAnalysisMap({
     trackPaintColor,
     trackPoints,
   ]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+
+    const empty = { type: "FeatureCollection" as const, features: [] };
+    const data =
+      upwindTackTrackFC?.features?.length
+        ? (upwindTackTrackFC as GeoJSON.FeatureCollection)
+        : empty;
+
+    const src = map.getSource("upwind-tack-segments") as mapboxgl.GeoJSONSource | undefined;
+    if (src) {
+      src.setData(data);
+      if (map.getLayer("upwind-tack-line")) {
+        map.moveLayer("upwind-tack-line");
+      }
+      return;
+    }
+    if (!upwindTackTrackFC?.features?.length) return;
+
+    map.addSource("upwind-tack-segments", { type: "geojson", data });
+    map.addLayer({
+      id: "upwind-tack-line",
+      type: "line",
+      source: "upwind-tack-segments",
+      layout: { "line-join": "round", "line-cap": "round" },
+      paint: {
+        "line-color": upwindTackPaintColor,
+        "line-width": 5,
+        "line-opacity": 0.95,
+      },
+    });
+  }, [mapLoaded, upwindTackPaintColor, upwindTackTrackFC]);
 
   useEffect(() => {
     const map = mapRef.current;

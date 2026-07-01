@@ -56,11 +56,17 @@ export { executeAnalysis, serializeAnalysisForDb } from "./run-analysis-wrapper"
   twaFromTackAngle,
   likelyTwaFromSnapshot,
   tackSideAfterManoeuvre,
+  tackSideFromCourse,
   windFromCogAndTackSide,
+  windFromHeadingAndSignedTwa,
+  signedTwaForTackSide,
   type FleetWindGrid,
 } from "./fleet-wind-grid";
 export {
   buildUpwindBetweenTackPointKinds,
   buildUpwindBetweenTackTrackSegmentFC,
+  mapboxUpwindTackLineColorExpr,
+  UPWIND_PORT_COLOR,
+  UPWIND_STBD_COLOR,
 } from "./upwind-tack-track-segments";
 export { buildFleetWindGridForRaceFleet, persistFleetWindGrid } from "./persist-fleet-wind-grid";

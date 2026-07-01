@@ -6,10 +6,13 @@ import {
   fleetWindGridTimeBuckets,
   fleetWindGridToGeoJSON,
   likelyTwaFromSnapshot,
+  signedTwaForTackSide,
   tackAngleFromSnapshot,
   tackSideAfterManoeuvre,
+  tackSideFromCourse,
   twaFromTackAngle,
   windFromCogAndTackSide,
+  windFromHeadingAndSignedTwa,
 } from "./fleet-wind-grid";
 import {
   buildUpwindBetweenTackPointKinds,
@@ -132,6 +135,28 @@ test("extractUpwindSamplesBetweenTacks yields samples between tacks", () => {
     assert.ok(s.windFromDeg >= 0 && s.windFromDeg < 360);
     assert.ok(s.tackSide === "P" || s.tackSide === "S");
   }
+});
+
+test("windFromHeadingAndSignedTwa: unified heading − signed TWA", () => {
+  assert.equal(windFromHeadingAndSignedTwa(180, -45), 225);
+  assert.equal(windFromHeadingAndSignedTwa(135, 45), 90);
+  assert.equal(
+    windFromCogAndTackSide(180, 45, "S"),
+    windFromHeadingAndSignedTwa(180, signedTwaForTackSide(45, "S")),
+  );
+});
+
+test("tackSideFromCourse matches analytic port/stbd headings", () => {
+  assert.equal(tackSideFromCourse(45, 0), "P");
+  assert.equal(tackSideFromCourse(315, 0), "S");
+});
+
+test("extractUpwindSamplesBetweenTacks works when course legs are not typed upwind", () => {
+  const wind = 10;
+  const snap = makeUpwindTrack(wind, 52, 328);
+  snap.legs = [{ type: "reach", startIdx: 0, endIdx: snap.points.length - 1 }];
+  const samples = extractUpwindSamplesBetweenTacks(snap, "sub-a", wind);
+  assert.ok(samples.length >= 10);
 });
 
 test("buildUpwindBetweenTackPointKinds colours port and starboard segments", () => {

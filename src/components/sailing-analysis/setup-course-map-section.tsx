@@ -16,6 +16,7 @@ import { useSetupAnalysisPreview } from "@/components/sailing-analysis/use-setup
 import { useFleetWindGridDisplay } from "@/components/sailing-analysis/use-fleet-wind-grid-display";
 import { WindGridTimeSlider } from "@/components/sailing-analysis/wind-grid-time-slider";
 import type { FleetWindGrid } from "@/lib/sailing-analysis/fleet-wind-grid";
+import { buildUpwindBetweenTackTrackSegmentFC } from "@/lib/sailing-analysis/upwind-tack-track-segments";
 
 export function SetupCourseMapSection({
   clubMarks,
@@ -79,6 +80,20 @@ export function SetupCourseMapSection({
   const legGatesFC = useMemo(
     () => buildGateOverlayFC(clubMarks, course, laps, markOverrides, courseSetup),
     [clubMarks, course, laps, markOverrides, courseSetup],
+  );
+
+  const previewWind = userWind ?? preview?.windDir ?? 0;
+  const upwindTackTrackFC = useMemo(
+    () =>
+      preview
+        ? buildUpwindBetweenTackTrackSegmentFC(
+            trackPoints,
+            preview.tacks ?? [],
+            preview.legs ?? [],
+            previewWind,
+          )
+        : { type: "FeatureCollection" as const, features: [] },
+    [preview, previewWind, trackPoints],
   );
 
   const onMarkDrag = useCallback(
@@ -148,6 +163,7 @@ export function SetupCourseMapSection({
         draggableAllMarks
         startFinishLine={sfEnds}
         trackSegmentFC={preview?.trackSegmentFC ?? null}
+        upwindTackTrackFC={upwindTackTrackFC}
         legGatesFC={legGatesFC}
         showMarkGates={showMarkGates}
         manoeuvres={
