@@ -138,12 +138,27 @@ export async function loadTrackPointsForSubmission(
   supabase: SupabaseClient,
   userId: string,
   sub: {
+    id?: string;
     track_source: string;
     external_activity_id: string;
     storage_path: string | null;
+    track_points_cache?: unknown;
   },
   opts?: { staffView?: boolean },
 ): Promise<TrackPointRow[]> {
+  const inlinedCache = normalizeTrackPoints(sub.track_points_cache);
+  if (inlinedCache.length >= 2) return inlinedCache;
+
+  if (opts?.staffView && sub.id) {
+    const { data: row } = await supabase
+      .from("race_track_submissions")
+      .select("track_points_cache")
+      .eq("id", sub.id)
+      .maybeSingle();
+    const dbCache = normalizeTrackPoints(row?.track_points_cache);
+    if (dbCache.length >= 2) return dbCache;
+  }
+
   const fromStorage = await loadTrackPointsFromStorage(supabase, sub, userId);
   if (fromStorage.length > 0) return fromStorage;
 

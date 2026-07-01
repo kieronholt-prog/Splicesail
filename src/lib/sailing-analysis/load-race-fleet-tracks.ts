@@ -61,23 +61,21 @@ async function resolveFleetTrackPoints(
   supabase: SupabaseClient,
   sub: FleetSubmissionRow,
 ): Promise<{ lat: number; lon: number; time: number }[]> {
-  const cached = normalizeTrackPoints(sub.track_points_cache);
-  if (cached.length >= 2) return cached;
-
-  const fromStorage = await loadTrackPointsForSubmission(supabase, sub.user_id, sub, { staffView: true });
-  if (fromStorage.length >= 2) {
-    try {
-      await supabase.rpc("set_track_submission_points_cache", {
-        p_submission_id: sub.id,
-        p_points: fromStorage,
-      });
-    } catch {
-      /* db cache optional until migration applied */
+  const points = await loadTrackPointsForSubmission(supabase, sub.user_id, sub, { staffView: true });
+  if (points.length >= 2 && sub.id) {
+    const cached = normalizeTrackPoints(sub.track_points_cache);
+    if (cached.length < 2) {
+      try {
+        await supabase.rpc("set_track_submission_points_cache", {
+          p_submission_id: sub.id,
+          p_points: points,
+        });
+      } catch {
+        /* db cache optional until migration applied */
+      }
     }
-    return fromStorage;
   }
-
-  return [];
+  return points;
 }
 
 function submissionMatchesFleet(

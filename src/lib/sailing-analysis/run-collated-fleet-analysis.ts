@@ -22,6 +22,7 @@ type SubmissionRow = {
   track_source: string;
   external_activity_id: string;
   storage_path: string | null;
+  track_points_cache?: unknown;
 };
 
 export async function runCollatedAnalysisForFleet(
@@ -61,12 +62,18 @@ export async function runCollatedAnalysisForFleet(
   for (const sub of submissions) {
     const subFleetId = await resolveSubmissionRaceFleetId(supabase, sub);
     if (subFleetId !== raceFleetId) {
+      console.warn(
+        `runCollatedAnalysisForFleet: skip submission ${sub.id} — fleet ${subFleetId ?? "none"} ≠ ${raceFleetId}`,
+      );
       skipped++;
       continue;
     }
 
     const points = await loadTrackPointsForSubmission(supabase, sub.user_id, sub, { staffView: true });
     if (points.length < 20) {
+      console.warn(
+        `runCollatedAnalysisForFleet: skip submission ${sub.id} — ${points.length} GPS points (need ≥20)`,
+      );
       skipped++;
       continue;
     }

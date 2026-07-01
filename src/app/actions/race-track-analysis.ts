@@ -209,7 +209,7 @@ export async function saveAndAnalyseRaceFleetAnalysisAction(formData: FormData) 
 
   const { data: submissions } = await supabase
     .from("race_track_submissions")
-    .select("id, user_id, race_id, race_entry_id, boat_id, track_source, external_activity_id, storage_path")
+    .select("id, user_id, race_id, race_entry_id, boat_id, track_source, external_activity_id, storage_path, track_points_cache")
     .eq("race_id", ids.raceId)
     .eq("analysis_mode", "collated")
     .in("status", ["pending_ro", "ready"]);
@@ -266,7 +266,7 @@ export async function confirmRaceFleetAnalysisAction(formData: FormData) {
 
   const { data: submissions } = await supabase
     .from("race_track_submissions")
-    .select("id, user_id, race_id, race_entry_id, boat_id, track_source, external_activity_id, storage_path")
+    .select("id, user_id, race_id, race_entry_id, boat_id, track_source, external_activity_id, storage_path, track_points_cache")
     .eq("race_id", raceId)
     .eq("analysis_mode", "collated")
     .in("status", ["pending_ro", "ready"]);
@@ -309,7 +309,7 @@ export async function confirmAllRaceFleetAnalysisAction(formData: FormData) {
 
   const { data: submissions } = await supabase
     .from("race_track_submissions")
-    .select("id, user_id, race_id, race_entry_id, boat_id, track_source, external_activity_id, storage_path")
+    .select("id, user_id, race_id, race_entry_id, boat_id, track_source, external_activity_id, storage_path, track_points_cache")
     .eq("race_id", raceId)
     .eq("analysis_mode", "collated")
     .in("status", ["pending_ro", "ready"]);

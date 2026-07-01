@@ -387,7 +387,7 @@ export async function setAnalysisModeAction(formData: FormData) {
     const { data: freshSub } = await supabase
       .from("race_track_submissions")
       .select(
-        "id, user_id, race_id, race_entry_id, boat_id, track_source, external_activity_id, storage_path",
+        "id, user_id, race_id, race_entry_id, boat_id, track_source, external_activity_id, storage_path, track_points_cache",
       )
       .eq("id", submissionId)
       .maybeSingle();
