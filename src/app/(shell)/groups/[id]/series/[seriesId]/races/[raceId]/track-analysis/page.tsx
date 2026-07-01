@@ -27,19 +27,13 @@ import {
   RO_RACE_LINE_NAV_ACTIVE_CLASS,
   RO_RACE_LINE_NAV_LINK_CLASS,
 } from "@/lib/ro-race-line-nav";
-import { fleetStatusBannerClass } from "@/lib/sailing-analysis/ro-fleet-analysis-status";
-
 export const dynamic = "force-dynamic";
 
 type Props = {
   params: Promise<{ id: string; seriesId: string; raceId: string }>;
   searchParams: Promise<{
     error?: string;
-    settings_saved?: string;
-    analysis_ready?: string;
     fleet?: string;
-    analysed?: string;
-    skipped?: string;
     fleets_synced?: string;
   }>;
 };
@@ -199,27 +193,6 @@ export default async function RoTrackAnalysisPage({ params, searchParams }: Prop
         {error || loadError ? (
           <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
             {error ?? loadError}
-          </p>
-        ) : null}
-        {q.analysis_ready === "1" || q.settings_saved === "1" ? (
-          <p className={`mt-4 ${fleetStatusBannerClass("green")}`}>
-            {(() => {
-              const fleetName = raceFleets.find((f) => f.id === q.fleet)?.name;
-              const prefix = fleetName ? `${fleetName}: ` : "";
-              if (q.analysis_ready === "1") {
-                const analysed = q.analysed ? Number(q.analysed) : 0;
-                const skipped = q.skipped ? Number(q.skipped) : 0;
-                const parts = [`${prefix}Course saved`];
-                if (analysed > 0) {
-                  parts.push(`${analysed} track${analysed === 1 ? "" : "s"} analysed`);
-                }
-                if (skipped > 0) {
-                  parts.push(`${skipped} skipped (insufficient GPS or wrong fleet)`);
-                }
-                return `${parts.join(" — ")}. Sailors are notified on their home page.`;
-              }
-              return `${prefix}Course settings saved — new uploads in this fleet will analyse automatically.`;
-            })()}
           </p>
         ) : null}
         {fleetsSyncedOnLoad || q.fleets_synced ? (

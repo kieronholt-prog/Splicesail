@@ -26,13 +26,6 @@ import { markNamesForCourse } from "@/lib/sailing-analysis/course-mark-names";
 import type { StartFinishLineEnds } from "@/lib/sailing-analysis/analysis-types";
 import type { FleetCollatedCounts, FleetTrackOverlay } from "@/lib/sailing-analysis/load-race-fleet-tracks";
 import type { RaceFleetAnalysisSettingsRow } from "@/lib/sailing-analysis/race-fleet-analysis-settings";
-import {
-  fleetAnalysisSummary,
-  fleetAnalysisTone,
-  fleetHasCourseSettings,
-  fleetStatusBannerClass,
-} from "@/lib/sailing-analysis/ro-fleet-analysis-status";
-
 export type RaceFleetVm = {
   id: string;
   name: string;
@@ -68,9 +61,6 @@ export function RoTrackAnalysisFleetPanel({
   const readyCount = collatedCounts.ready;
   const totalCollated = pendingCount + readyCount;
   const tracksOnMap = fleetTracks.length;
-  const hasCourseSettings = fleetHasCourseSettings(savedSettings);
-  const statusTone = fleetAnalysisTone(collatedCounts, hasCourseSettings);
-  const statusSummary = fleetAnalysisSummary(collatedCounts, hasCourseSettings);
   const [courseLetter, setCourseLetter] = useState(() =>
     defaultCourseLetterValue(savedSettings?.course_letter, courses),
   );
@@ -121,7 +111,6 @@ export function RoTrackAnalysisFleetPanel({
         </p>
       ) : null}
 
-      <p className={fleetStatusBannerClass(statusTone)}>{statusSummary}</p>
       {tracksOnMap > 0 && tracksOnMap < totalCollated ? (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
           {tracksOnMap} of {totalCollated} tracks have GPS on the map — sailors may need to re-open their upload to

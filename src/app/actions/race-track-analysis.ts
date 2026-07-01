@@ -156,7 +156,7 @@ export async function saveRaceFleetAnalysisSettingsAction(formData: FormData) {
       ids.groupId,
       ids.seriesId,
       ids.raceId,
-      `fleet=${encodeURIComponent(ids.raceFleetId)}&settings_saved=1`,
+      `fleet=${encodeURIComponent(ids.raceFleetId)}`,
     ),
   );
 }
@@ -214,7 +214,7 @@ export async function saveAndAnalyseRaceFleetAnalysisAction(formData: FormData) 
     .eq("analysis_mode", "collated")
     .in("status", ["pending_ro", "ready"]);
 
-  const { analysed, skipped } = await runCollatedAnalysisForFleet(supabase, {
+  await runCollatedAnalysisForFleet(supabase, {
     groupId: ids.groupId,
     raceId: ids.raceId,
     raceFleetId: ids.raceFleetId,
@@ -226,13 +226,14 @@ export async function saveAndAnalyseRaceFleetAnalysisAction(formData: FormData) 
   revalidatePath("/tracks");
   revalidatePath("/");
   revalidatePath(trackAnalysisPath(ids.groupId, ids.seriesId, ids.raceId));
-  const query = new URLSearchParams({
-    fleet: ids.raceFleetId,
-    analysis_ready: "1",
-    analysed: String(analysed),
-  });
-  if (skipped > 0) query.set("skipped", String(skipped));
-  redirect(trackAnalysisPath(ids.groupId, ids.seriesId, ids.raceId, query.toString()));
+  redirect(
+    trackAnalysisPath(
+      ids.groupId,
+      ids.seriesId,
+      ids.raceId,
+      `fleet=${encodeURIComponent(ids.raceFleetId)}`,
+    ),
+  );
 }
 
 /** @deprecated Use saveRaceFleetAnalysisSettingsAction */
@@ -287,7 +288,7 @@ export async function confirmRaceFleetAnalysisAction(formData: FormData) {
       groupId,
       seriesId,
       raceId,
-      `fleet=${encodeURIComponent(raceFleetId)}&analysis_ready=1&analysed=${analysed}`,
+      `fleet=${encodeURIComponent(raceFleetId)}`,
     ),
   );
 }
@@ -348,7 +349,7 @@ export async function confirmAllRaceFleetAnalysisAction(formData: FormData) {
   revalidatePath("/");
   revalidatePath(trackAnalysisPath(groupId, seriesId, raceId));
   redirect(
-    trackAnalysisPath(groupId, seriesId, raceId, `analysis_ready=1&analysed=${totalAnalysed}`),
+    trackAnalysisPath(groupId, seriesId, raceId),
   );
 }
 
