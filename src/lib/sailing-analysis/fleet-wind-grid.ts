@@ -51,7 +51,7 @@ export type WindGridSample = {
 export type AnalysisPoint = {
   lat?: number;
   lon?: number;
-  time?: number;
+  time?: number | null;
   ss?: number;
   sog?: number;
   dir?: number;

@@ -205,6 +205,9 @@ export function CourseAnalysisMap({
           paint: { "circle-radius": 1.8, "circle-color": "#d9fff7", "circle-opacity": 0.72 },
         });
       }
+      if (map.getLayer("upwind-tack-line")) {
+        map.moveLayer("upwind-tack-line");
+      }
     }
 
     const courseCoords = courseLine.map((p) => [p.lon, p.lat]);
