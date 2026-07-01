@@ -13,6 +13,9 @@ import type { FleetTrackOverlay } from "@/lib/sailing-analysis/load-race-fleet-t
 import { CourseAnalysisMap } from "@/components/sailing-analysis/course-analysis-map";
 import { WindRose } from "@/components/sailing-analysis/wind-rose";
 import { useSetupAnalysisPreview } from "@/components/sailing-analysis/use-setup-analysis-preview";
+import { useFleetWindGridDisplay } from "@/components/sailing-analysis/use-fleet-wind-grid-display";
+import { WindGridTimeSlider } from "@/components/sailing-analysis/wind-grid-time-slider";
+import type { FleetWindGrid } from "@/lib/sailing-analysis/fleet-wind-grid";
 
 export function SetupCourseMapSection({
   clubMarks,
@@ -26,7 +29,8 @@ export function SetupCourseMapSection({
   previewEnabled = true,
   userWind,
   fleetTracks = [],
-  windGridFC = null,
+  fleetWindGrid = null,
+  raceStartUnixSec = null,
   onWindChange,
 }: {
   clubMarks: SailingMarkRow[];
@@ -40,11 +44,14 @@ export function SetupCourseMapSection({
   previewEnabled?: boolean;
   userWind?: number | null;
   fleetTracks?: FleetTrackOverlay[];
-  windGridFC?: GeoJSON.FeatureCollection | { type: string; features: unknown[] } | null;
+  fleetWindGrid?: FleetWindGrid | null;
+  raceStartUnixSec?: number | null;
   onWindChange?: (deg: number) => void;
 }) {
   const [showMarkGates, setShowMarkGates] = useState(true);
   const [showWindGrid, setShowWindGrid] = useState(true);
+  const { windGridFC, selectedBucket, setTimeBucket, showTimeSlider } =
+    useFleetWindGridDisplay(fleetWindGrid);
 
   const sfEnds = useMemo(() => sfLineFromCourseSetup(courseSetup), [courseSetup]);
 
@@ -102,15 +109,25 @@ export function SetupCourseMapSection({
           Show mark rounding gate lines
         </label>
         {windGridFC?.features?.length ? (
-          <label className="flex items-center gap-2 text-sm text-splice-ocean dark:text-splice-water">
-            <input
-              type="checkbox"
-              checked={showWindGrid}
-              onChange={(e) => setShowWindGrid(e.target.checked)}
-              className="rounded border-splice-sky"
-            />
-            Show fleet wind grid (50 m · 5 min)
-          </label>
+          <>
+            <label className="flex items-center gap-2 text-sm text-splice-ocean dark:text-splice-water">
+              <input
+                type="checkbox"
+                checked={showWindGrid}
+                onChange={(e) => setShowWindGrid(e.target.checked)}
+                className="rounded border-splice-sky"
+              />
+              Show fleet wind grid (50 m · 5 min)
+            </label>
+            {showTimeSlider && fleetWindGrid && selectedBucket != null ? (
+              <WindGridTimeSlider
+                grid={fleetWindGrid}
+                value={selectedBucket}
+                onChange={setTimeBucket}
+                raceStartUnixSec={raceStartUnixSec}
+              />
+            ) : null}
+          </>
         ) : null}
         {onWindChange ? (
           <div className="w-[200px]">

@@ -10,6 +10,9 @@ import { CourseAnalysisMap } from "@/components/sailing-analysis/course-analysis
 import { ManeuverNavigator } from "@/components/sailing-analysis/maneuver-navigator";
 import { UpwindByTackPanel } from "@/components/sailing-analysis/upwind-by-tack-panel";
 import { WindRose } from "@/components/sailing-analysis/wind-rose";
+import { useFleetWindGridDisplay } from "@/components/sailing-analysis/use-fleet-wind-grid-display";
+import { WindGridTimeSlider } from "@/components/sailing-analysis/wind-grid-time-slider";
+import type { FleetWindGrid } from "@/lib/sailing-analysis/fleet-wind-grid";
 import type { AnalysisSnapshot, StartFinishLineEnds } from "@/lib/sailing-analysis/analysis-types";
 import type { MapMarkDisplay } from "@/lib/sailing-analysis/map-display";
 
@@ -24,7 +27,8 @@ export function AnalysisView({
   startFinishLine,
   legGatesFC,
   showMarkGates = false,
-  windGridFC = null,
+  fleetWindGrid = null,
+  raceStartUnixSec = null,
   windOverride,
   onWindOverrideChange,
   editableWind = false,
@@ -37,7 +41,8 @@ export function AnalysisView({
   startFinishLine?: StartFinishLineEnds | null;
   legGatesFC?: GeoJSON.FeatureCollection | { type: string; features: unknown[] } | null;
   showMarkGates?: boolean;
-  windGridFC?: GeoJSON.FeatureCollection | { type: string; features: unknown[] } | null;
+  fleetWindGrid?: FleetWindGrid | null;
+  raceStartUnixSec?: number | null;
   windOverride?: number | null;
   onWindOverrideChange?: (deg: number) => void;
   editableWind?: boolean;
@@ -65,6 +70,8 @@ export function AnalysisView({
   const racingTacks = useMemo(() => tacks.filter((t) => !t.excludeFromStatsAndVMG), [tacks]);
   const racingGybes = useMemo(() => gybes.filter((g) => !g.excludeFromStatsAndVMG), [gybes]);
   const [showWindGrid, setShowWindGrid] = useState(true);
+  const { windGridFC, selectedBucket, setTimeBucket, showTimeSlider } =
+    useFleetWindGridDisplay(fleetWindGrid);
 
   return (
     <div className="flex flex-col gap-6">
@@ -113,15 +120,25 @@ export function AnalysisView({
       {tab === "map" ? (
         <div className="flex flex-col gap-3">
           {windGridFC?.features?.length ? (
-            <label className="flex items-center gap-2 text-sm text-splice-ocean dark:text-splice-water">
-              <input
-                type="checkbox"
-                checked={showWindGrid}
-                onChange={(e) => setShowWindGrid(e.target.checked)}
-                className="rounded border-splice-sky"
-              />
-              Show fleet wind grid (50 m cells · 5 min periods · arrows = wind flow)
-            </label>
+            <div className="flex flex-wrap items-end gap-4">
+              <label className="flex items-center gap-2 text-sm text-splice-ocean dark:text-splice-water">
+                <input
+                  type="checkbox"
+                  checked={showWindGrid}
+                  onChange={(e) => setShowWindGrid(e.target.checked)}
+                  className="rounded border-splice-sky"
+                />
+                Show fleet wind grid (50 m cells · 5 min periods · arrows = wind flow)
+              </label>
+              {showTimeSlider && fleetWindGrid && selectedBucket != null ? (
+                <WindGridTimeSlider
+                  grid={fleetWindGrid}
+                  value={selectedBucket}
+                  onChange={setTimeBucket}
+                  raceStartUnixSec={raceStartUnixSec}
+                />
+              ) : null}
+            </div>
           ) : null}
           <CourseAnalysisMap
             marks={mapMarks ?? {}}

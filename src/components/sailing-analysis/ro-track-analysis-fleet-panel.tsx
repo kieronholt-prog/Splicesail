@@ -26,7 +26,7 @@ import { markNamesForCourse } from "@/lib/sailing-analysis/course-mark-names";
 import type { StartFinishLineEnds } from "@/lib/sailing-analysis/analysis-types";
 import type { FleetCollatedCounts, FleetTrackOverlay } from "@/lib/sailing-analysis/load-race-fleet-tracks";
 import type { RaceFleetAnalysisSettingsRow } from "@/lib/sailing-analysis/race-fleet-analysis-settings";
-import { fleetWindGridToGeoJSON, parseFleetWindGrid } from "@/lib/sailing-analysis/fleet-wind-grid";
+import { parseFleetWindGrid } from "@/lib/sailing-analysis/fleet-wind-grid";
 export type RaceFleetVm = {
   id: string;
   name: string;
@@ -95,11 +95,10 @@ export function RoTrackAnalysisFleetPanel({
   const previewWind = wind.trim() ? Number(wind) : null;
   const hasCollatedTracks = totalCollated > 0;
 
-  const windGridFC = useMemo(() => {
-    const grid = parseFleetWindGrid(
+  const fleetWindGrid = useMemo(() => {
+    return parseFleetWindGrid(
       (savedSettings?.course_setup as Record<string, unknown> | undefined)?.fleetWindGrid,
     );
-    return grid ? fleetWindGridToGeoJSON(grid) : null;
   }, [savedSettings?.course_setup]);
 
   function onCourseLetterChange(next: string) {
@@ -193,7 +192,8 @@ export function RoTrackAnalysisFleetPanel({
           previewEnabled={previewTrack.length >= 20}
           userWind={previewWind}
           onWindChange={(deg) => setWind(String(deg))}
-          windGridFC={windGridFC}
+          fleetWindGrid={fleetWindGrid}
+          raceStartUnixSec={raceStartUnixSec}
         />
 
         <button

@@ -505,6 +505,13 @@ export async function rerunTrackAnalysisAction(formData: FormData) {
 
   const { supabase, user, sub } = await loadSubmissionOwned(submissionId);
 
+  if (sub.analysis_mode === "collated") {
+    redirect(
+      `/tracks/${submissionId}/analysis?error=` +
+        encodeURIComponent("Collated fleet tracks are analysed by the race officer."),
+    );
+  }
+
   await supabase
     .from("race_track_submissions")
     .update({

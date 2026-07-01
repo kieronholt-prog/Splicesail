@@ -31,7 +31,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ ok: true, submission: detail });
     }
 
-    const limit = Math.min(60, Math.max(1, Number(url.searchParams.get("limit") ?? 40) || 40));
+    const limit = Math.min(60, Math.max(1, Number(url.searchParams.get("limit") ?? 60) || 60));
     const submissions = await loadMobileTrackSubmissions(auth.supabase, auth.userId, limit);
     return NextResponse.json({ ok: true, submissions });
   } catch (e) {

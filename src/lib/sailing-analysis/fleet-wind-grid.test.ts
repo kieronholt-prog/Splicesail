@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import {
   buildFleetWindGrid,
   extractUpwindSamplesBetweenTacks,
+  fleetWindGridTimeBuckets,
   fleetWindGridToGeoJSON,
   tackAngleFromSnapshot,
   twaFromTackAngle,
+  windFromCogAndTackSide,
 } from "./fleet-wind-grid";
 
 function makeUpwindTrack(windFrom: number, portCog: number, stbdCog: number, t0: number) {
@@ -57,6 +59,15 @@ function makeUpwindTrack(windFrom: number, portCog: number, stbdCog: number, t0:
 test("twaFromTackAngle uses half the average tack angle", () => {
   assert.equal(twaFromTackAngle(84), 42);
   assert.equal(twaFromTackAngle(100), 50);
+  assert.equal(twaFromTackAngle(90), 45);
+});
+
+test("windFromCogAndTackSide: starboard COG 180 with TWA 45 gives wind from 225", () => {
+  assert.equal(windFromCogAndTackSide(180, 45, "S"), 225);
+});
+
+test("windFromCogAndTackSide: port COG 135 with TWA 45 gives wind from 90", () => {
+  assert.equal(windFromCogAndTackSide(135, 45, "P"), 90);
 });
 
 test("extractUpwindSamplesBetweenTacks yields samples between tacks", () => {
@@ -87,4 +98,24 @@ test("buildFleetWindGrid merges two boats in same cell", () => {
   assert.ok(multiBoat, "expected at least one cell with both boats");
   const geo = fleetWindGridToGeoJSON(grid!);
   assert.ok(geo.features.length >= 2);
+});
+
+test("fleetWindGridToGeoJSON filters by time bucket", () => {
+  const wind = 10;
+  const snap1 = makeUpwindTrack(wind, 52, 328, 1_700_000_000);
+  const snap2 = makeUpwindTrack(wind, 50, 326, 1_700_000_600);
+  const grid = buildFleetWindGrid(
+    [
+      { submissionId: "a", snapshot: snap1 },
+      { submissionId: "b", snapshot: snap2 },
+    ],
+    wind,
+    { timeBucketSec: 300 },
+  );
+  assert.ok(grid);
+  const buckets = fleetWindGridTimeBuckets(grid!);
+  assert.ok(buckets.length >= 2, "expected samples in different 5 min buckets");
+  const firstOnly = fleetWindGridToGeoJSON(grid!, { timeBucket: buckets[0] });
+  const all = fleetWindGridToGeoJSON(grid!);
+  assert.ok(firstOnly.features.length < all.features.length);
 });

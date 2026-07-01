@@ -37,7 +37,7 @@ function num(v: unknown): number | null {
 export async function loadMobileTrackSubmissions(
   supabase: SupabaseClient,
   userId: string,
-  limit = 40,
+  limit = 60,
 ): Promise<MobileTrackSubmissionRow[]> {
   const { data: rows, error } = await supabase
     .from("race_track_submissions")
@@ -51,23 +51,45 @@ export async function loadMobileTrackSubmissions(
       analysis_mode,
       race_id,
       race_entry_id,
-      races ( name, series ( name ) ),
-      race_track_analyses ( stats, leg_summary, wind_direction )
+      races ( name, series ( name ) )
     `,
     )
     .eq("user_id", userId)
     .neq("status", "cancelled")
-    .order("activity_started_at", { ascending: false })
+    .order("activity_started_at", { ascending: false, nullsFirst: false })
     .limit(limit);
 
-  if (error || !rows?.length) return [];
+  if (error) {
+    console.error("loadMobileTrackSubmissions:", error.message);
+    return [];
+  }
+  if (!rows?.length) return [];
+
+  const readyIds = rows.filter((r) => r.status === "ready").map((r) => r.id);
+  const analysisBySubmissionId = new Map<
+    string,
+    { stats?: Record<string, unknown>; leg_summary?: unknown[]; wind_direction?: number | null }
+  >();
+
+  if (readyIds.length > 0) {
+    const { data: analysisRows, error: analysisErr } = await supabase
+      .from("race_track_analyses")
+      .select("submission_id, stats, leg_summary, wind_direction")
+      .in("submission_id", readyIds);
+
+    if (analysisErr) {
+      console.error("loadMobileTrackSubmissions analyses:", analysisErr.message);
+    } else {
+      for (const row of analysisRows ?? []) {
+        if (row.submission_id) {
+          analysisBySubmissionId.set(row.submission_id, row);
+        }
+      }
+    }
+  }
 
   return rows.map((row) => {
-    const analysis = unwrapOne(
-      row.race_track_analyses as
-        | { stats?: Record<string, unknown>; leg_summary?: unknown[]; wind_direction?: number | null }
-        | null,
-    );
+    const analysis = analysisBySubmissionId.get(row.id);
     const stats = (analysis?.stats ?? {}) as Record<string, unknown>;
     const legs = Array.isArray(analysis?.leg_summary) ? analysis.leg_summary : [];
     const race = unwrapOne(row.races as { name?: string; series?: { name?: string } | null } | null);

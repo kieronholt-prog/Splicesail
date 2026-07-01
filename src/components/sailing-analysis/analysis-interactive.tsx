@@ -8,6 +8,7 @@ import { buildCourseSetupJson } from "@/components/sailing-analysis/course-setup
 import { rerunTrackAnalysisAction } from "@/app/actions/track-submissions";
 import { DETECTION_DEFAULTS } from "@/lib/sailing-analysis";
 import type { AnalysisSnapshot, StartFinishLineEnds } from "@/lib/sailing-analysis/analysis-types";
+import type { FleetWindGrid } from "@/lib/sailing-analysis/fleet-wind-grid";
 import type { MarkOverride, SailingCourseRow, SailingMarkRow } from "@/lib/sailing-analysis/types";
 import { buildMapMarksWithSfEnds, buildCourseLinePoints } from "@/lib/sailing-analysis/map-display";
 import { buildGateOverlayFC } from "@/lib/sailing-analysis/gate-overlay";
@@ -17,7 +18,6 @@ import {
   spliceFieldHintClass,
   spliceFieldLabelClass,
 } from "@/components/sailing-analysis/form-field-classes";
-
 export function AnalysisInteractive({
   submissionId,
   snapshot,
@@ -30,7 +30,8 @@ export function AnalysisInteractive({
   initialCourseSetup,
   trackPoints,
   collatedPreset = false,
-  windGridFC = null,
+  fleetWindGrid = null,
+  raceStartUnixSec = null,
 }: {
   submissionId: string;
   snapshot: AnalysisSnapshot;
@@ -42,9 +43,10 @@ export function AnalysisInteractive({
   initialMarkOverrides: Record<string, MarkOverride>;
   initialCourseSetup: Record<string, unknown> | null;
   trackPoints: { lat: number; lon: number; time?: number | null }[];
-  /** RO has set course/wind — sailor may fine-tune marks, wind, and GPS offset. */
+  /** RO has set course/wind — read-only for sailors. */
   collatedPreset?: boolean;
-  windGridFC?: GeoJSON.FeatureCollection | { type: string; features: unknown[] } | null;
+  fleetWindGrid?: FleetWindGrid | null;
+  raceStartUnixSec?: number | null;
 }) {
   const [showAdjustments, setShowAdjustments] = useState(false);
   const [markOverrides, setMarkOverrides] = useState(initialMarkOverrides);
@@ -58,6 +60,12 @@ export function AnalysisInteractive({
         snapshot.gpsToBowM ??
         2,
     ),
+  );
+
+  const roSfEnds = useMemo(() => initialSfLineEnds(initialCourseSetup), [initialCourseSetup]);
+  const roMapMarks = useMemo(
+    () => buildMapMarksWithSfEnds(clubMarks, course, initialMarkOverrides, roSfEnds),
+    [clubMarks, course, initialMarkOverrides, roSfEnds],
   );
 
   const courseSetup = useMemo(
@@ -83,17 +91,35 @@ export function AnalysisInteractive({
     [clubMarks, course, markOverrides, sfEnds],
   );
 
-  const effWind = windOverride ?? windDirection ?? snapshot.windDir ?? 0;
+  const effWind = collatedPreset
+    ? (windDirection ?? snapshot.windDir ?? 0)
+    : (windOverride ?? windDirection ?? snapshot.windDir ?? 0);
+
+  if (collatedPreset) {
+    return (
+      <div className="flex flex-col gap-4">
+        <p className="rounded-lg border border-splice-sky/80 bg-splice-sky/10 px-3 py-2 text-sm text-splice-navy dark:border-splice-ocean dark:bg-splice-navy-light/30 dark:text-splice-foam">
+          Course, wind, and laps were set by the race officer. This analysis view is read-only.
+        </p>
+
+        <AnalysisView
+          snapshot={snapshot}
+          stats={stats}
+          windDirection={effWind}
+          mapMarks={roMapMarks}
+          courseLine={buildCourseLinePoints(clubMarks, course, initialMarkOverrides)}
+          startFinishLine={roSfEnds}
+          legGatesFC={buildGateOverlayFC(clubMarks, course, laps, initialMarkOverrides, initialCourseSetup)}
+          showMarkGates
+          fleetWindGrid={fleetWindGrid}
+          raceStartUnixSec={raceStartUnixSec}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
-      {collatedPreset ? (
-        <p className="rounded-lg border border-splice-sky/80 bg-splice-sky/10 px-3 py-2 text-sm text-splice-navy dark:border-splice-ocean dark:bg-splice-navy-light/30 dark:text-splice-foam">
-          Course and laps were set by the race officer. You can adjust wind direction, mark positions,
-          committee line, and GPS-to-bow offset below, then re-run analysis.
-        </p>
-      ) : null}
-
       <div className="rounded-lg border border-splice-sky p-4 dark:border-splice-ocean">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -173,7 +199,8 @@ export function AnalysisInteractive({
         windOverride={windOverride}
         onWindOverrideChange={setWindOverride}
         editableWind
-        windGridFC={windGridFC}
+        fleetWindGrid={fleetWindGrid}
+        raceStartUnixSec={raceStartUnixSec}
       />
     </div>
   );

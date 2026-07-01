@@ -55,6 +55,8 @@ type AnalysisTack = {
   turnIdx?: number;
   idx?: number;
   excludeFromStatsAndVMG?: boolean;
+  sideAft?: "P" | "S";
+  sideBef?: "P" | "S";
 };
 
 type AnalysisLeg = {
@@ -91,11 +93,19 @@ function isPortTack(cogDeg: number, windFromDeg: number): boolean {
   return rel <= 180;
 }
 
-function impliedWindFromDeg(cogDeg: number, windFromRef: number, twaDeg: number): number {
-  if (isPortTack(cogDeg, windFromRef)) {
-    return (cogDeg - twaDeg + 360) % 360;
-  }
+/** Port: wind from = COG − TWA; starboard: wind from = COG + TWA. */
+export function windFromCogAndTackSide(cogDeg: number, twaDeg: number, side: "P" | "S"): number {
+  if (side === "P") return (cogDeg - twaDeg + 360) % 360;
   return (cogDeg + twaDeg + 360) % 360;
+}
+
+function resolveTackSide(
+  manoeuvre: { sideAft?: "P" | "S"; sideBef?: "P" | "S" } | undefined,
+  cogDeg: number,
+  windFromDeg: number,
+): "P" | "S" {
+  if (manoeuvre?.sideAft === "P" || manoeuvre?.sideAft === "S") return manoeuvre.sideAft;
+  return isPortTack(cogDeg, windFromDeg) ? "P" : "S";
 }
 
 function buildLegTypeAtIndex(pts: AnalysisPoint[], legs: AnalysisLeg[]): (string | null)[] {
@@ -140,19 +150,26 @@ export function extractUpwindSamplesBetweenTacks(
   const twaDeg = twaFromTackAngle(tackAngleFromSnapshot(snapshot));
   const legTypeAt = buildLegTypeAtIndex(points, legs);
 
-  const tacks = (snapshot.tacks ?? [])
+  const tackManoeuvres = (snapshot.tacks ?? [])
     .filter((t) => t.type === "tack" && !t.excludeFromStatsAndVMG)
-    .map((t) => Math.max(0, Math.min(points.length - 1, t.turnIdx ?? t.idx ?? 0)))
-    .sort((a, b) => a - b);
+    .map((t) => ({
+      idx: Math.max(0, Math.min(points.length - 1, t.turnIdx ?? t.idx ?? 0)),
+      sideAft: t.sideAft,
+      sideBef: t.sideBef,
+    }))
+    .sort((a, b) => a.idx - b.idx);
 
-  if (tacks.length < 2) return [];
+  if (tackManoeuvres.length < 2) return [];
 
   const out: Omit<WindGridSample, "weight">[] = [];
 
-  for (let t = 0; t < tacks.length - 1; t++) {
-    const from = tacks[t]!;
-    const to = tacks[t + 1]!;
+  for (let t = 0; t < tackManoeuvres.length - 1; t++) {
+    const from = tackManoeuvres[t]!.idx;
+    const to = tackManoeuvres[t + 1]!.idx;
     if (to - from < 4) continue;
+
+    const exitTack = tackManoeuvres[t];
+    let segmentTackSide: "P" | "S" | null = null;
 
     for (let i = from + 1; i < to; i++) {
       const p = points[i];
@@ -166,11 +183,15 @@ export function extractUpwindSamplesBetweenTacks(
       const vmg = vmgToWindKts(speedKts, cog, refWindFromDeg);
       if (vmg == null || vmg < MIN_UPWIND_VMG_KTS) continue;
 
+      if (!segmentTackSide) {
+        segmentTackSide = resolveTackSide(exitTack, cog, refWindFromDeg);
+      }
+
       out.push({
         lat: p.lat,
         lon: p.lon,
         time: p.time,
-        windFromDeg: impliedWindFromDeg(cog, refWindFromDeg, twaDeg),
+        windFromDeg: windFromCogAndTackSide(cog, twaDeg, segmentTackSide),
         speedKts,
         vmgKts: vmg,
         submissionId,
@@ -348,9 +369,23 @@ function cellPolygon(
   ];
 }
 
+/** Sorted unique time-bucket starts (unix sec) present in the grid. */
+export function fleetWindGridTimeBuckets(grid: FleetWindGrid): number[] {
+  const seen = new Set<number>();
+  for (const c of grid.cells) seen.add(c.timeBucket);
+  return [...seen].sort((a, b) => a - b);
+}
+
 /** GeoJSON for Mapbox: cell fills + arrow points at cell centres. */
-export function fleetWindGridToGeoJSON(grid: FleetWindGrid): GeoJSON.FeatureCollection {
-  const { cellSizeM, origin, cells } = grid;
+export function fleetWindGridToGeoJSON(
+  grid: FleetWindGrid,
+  opts?: { timeBucket?: number | null },
+): GeoJSON.FeatureCollection {
+  const { cellSizeM, origin, cells: allCells } = grid;
+  const cells =
+    opts?.timeBucket != null && Number.isFinite(opts.timeBucket)
+      ? allCells.filter((c) => c.timeBucket === opts.timeBucket)
+      : allCells;
   const features: GeoJSON.Feature[] = [];
 
   for (const cell of cells) {
