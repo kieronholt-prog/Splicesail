@@ -154,9 +154,25 @@ export function buildLegTypeAtIndex(pts: AnalysisPoint[], legs: AnalysisLeg[]): 
   return out;
 }
 
-export function extractRacingTackManoeuvres(tacks: AnalysisTack[], pointCount: number) {
+export type TackManoeuvre = {
+  idx: number;
+  sideAft?: "P" | "S";
+  sideBef?: "P" | "S";
+  crossing?: string;
+};
+
+export function extractTackManoeuvres(
+  tacks: AnalysisTack[],
+  pointCount: number,
+  opts?: { includeExcluded?: boolean },
+): TackManoeuvre[] {
+  const includeExcluded = opts?.includeExcluded ?? false;
   return (tacks ?? [])
-    .filter((t) => t.type === "tack" && !t.excludeFromStatsAndVMG)
+    .filter((t) => {
+      if (t.type !== "tack") return false;
+      if (!includeExcluded && t.excludeFromStatsAndVMG) return false;
+      return true;
+    })
     .map((t) => ({
       idx: Math.max(0, Math.min(pointCount - 1, t.turnIdx ?? t.idx ?? 0)),
       sideAft: t.sideAft,
@@ -164,6 +180,99 @@ export function extractRacingTackManoeuvres(tacks: AnalysisTack[], pointCount: n
       crossing: t.crossing,
     }))
     .sort((a, b) => a.idx - b.idx);
+}
+
+export function extractRacingTackManoeuvres(tacks: AnalysisTack[], pointCount: number) {
+  return extractTackManoeuvres(tacks, pointCount, { includeExcluded: false });
+}
+
+export type UpwindSegmentSpan = {
+  from: number;
+  to: number;
+  exitTack: TackManoeuvre | null;
+  entryTack: TackManoeuvre | null;
+};
+
+/** Steady sailing spans within upwind legs, split at all tacks (including mark-rounding tacks). */
+export function iterUpwindLegTackSegments(
+  points: AnalysisPoint[],
+  tacks: AnalysisTack[],
+  legs: AnalysisLeg[],
+  opts?: { includeExcludedTacks?: boolean },
+): UpwindSegmentSpan[] {
+  const includeExcludedTacks = opts?.includeExcludedTacks ?? true;
+  const allTacks = extractTackManoeuvres(tacks, points.length, {
+    includeExcluded: includeExcludedTacks,
+  });
+
+  const legRanges = (legs ?? [])
+    .filter((l) => l.type === "upwind" && l.startIdx != null && l.endIdx != null)
+    .map((l) => ({
+      start: Math.max(0, l.startIdx!),
+      end: Math.min(points.length - 1, l.endIdx!),
+    }));
+
+  const ranges =
+    legRanges.length > 0
+      ? legRanges
+      : allTacks.length >= 2
+        ? [{ start: 0, end: points.length - 1 }]
+        : [];
+
+  const spans: UpwindSegmentSpan[] = [];
+
+  for (const { start, end } of ranges) {
+    const legTacks = allTacks.filter((t) => t.idx >= start && t.idx <= end);
+    const boundarySet = new Set<number>([start, end, ...legTacks.map((t) => t.idx)]);
+    const boundaries = [...boundarySet].sort((a, b) => a - b);
+
+    for (let b = 0; b < boundaries.length - 1; b++) {
+      const segStart = boundaries[b]!;
+      const segEnd = boundaries[b + 1]!;
+      if (segEnd - segStart < 2) continue;
+
+      const exitTack = legTacks.find((t) => t.idx === segStart) ?? null;
+      const entryTack = legTacks.find((t) => t.idx === segEnd) ?? null;
+
+      const from = exitTack ? exitTack.idx : segStart - 1;
+      const to = entryTack ? entryTack.idx : segEnd + 1;
+      if (to - from < 3) continue;
+
+      spans.push({ from, to, exitTack, entryTack });
+    }
+  }
+
+  return spans;
+}
+
+/** Tack side for a steady span inside an upwind leg (course wind wins over mismatched labels). */
+export function resolveUpwindSegmentTackSide(
+  exitTack: TackManoeuvre | null,
+  entryTack: TackManoeuvre | null,
+  cogDeg: number,
+  windFromDeg: number,
+): "P" | "S" {
+  const fromCourse = tackSideFromCourse(cogDeg, windFromDeg);
+
+  if (exitTack && entryTack) {
+    return resolveSegmentTackSide(exitTack, entryTack, cogDeg, windFromDeg, true);
+  }
+
+  if (exitTack) {
+    const fromExit = tackSideAfterManoeuvre(exitTack, cogDeg, windFromDeg);
+    if (exitTack.sideAft === fromCourse) return exitTack.sideAft;
+    if (fromExit === fromCourse) return fromExit;
+    return fromCourse;
+  }
+
+  if (entryTack) {
+    if (entryTack.sideBef === "P" || entryTack.sideBef === "S") {
+      if (entryTack.sideBef === fromCourse) return entryTack.sideBef;
+    }
+    return fromCourse;
+  }
+
+  return fromCourse;
 }
 
 /** Average included tack angle (°) from analysis baselines, else port/stbd TWA spread. */
@@ -266,22 +375,22 @@ export function extractUpwindSamplesBetweenTacks(
   const points = snapshot.points ?? [];
   if (points.length < 3) return [];
 
-  const tackManoeuvres = extractRacingTackManoeuvres(snapshot.tacks ?? [], points.length);
-  if (tackManoeuvres.length < 2) return [];
+  const segments = iterUpwindLegTackSegments(points, snapshot.tacks ?? [], snapshot.legs ?? [], {
+    includeExcludedTacks: true,
+  });
+  if (segments.length === 0) return [];
 
   const out: Omit<WindGridSample, "weight">[] = [];
 
-  for (let t = 0; t < tackManoeuvres.length - 1; t++) {
-    const exitTack = tackManoeuvres[t]!;
-    const entryTack = tackManoeuvres[t + 1]!;
-    const from = exitTack.idx;
-    const to = entryTack.idx;
-    if (to - from < 4) continue;
+  for (const { from, to, exitTack, entryTack } of segments) {
+    const lo = Math.max(0, from + 1);
+    const hi = Math.min(points.length - 1, to - 1);
+    if (hi - lo < 2) continue;
 
     let segmentTackSide: "P" | "S" | null = null;
     let twaDeg: number | null = null;
 
-    for (let i = from + 1; i < to; i++) {
+    for (let i = lo; i <= hi; i++) {
       const p = points[i];
       if (!p || p.lat == null || p.lon == null || p.time == null) continue;
 
@@ -292,7 +401,7 @@ export function extractUpwindSamplesBetweenTacks(
       const vmg = vmgToWindKts(speedKts, cog, refWindFromDeg)!;
 
       if (!segmentTackSide) {
-        segmentTackSide = resolveSegmentTackSide(exitTack, entryTack, cog, refWindFromDeg, false);
+        segmentTackSide = resolveUpwindSegmentTackSide(exitTack, entryTack, cog, refWindFromDeg);
         twaDeg = likelyTwaFromSnapshot(snapshot, segmentTackSide);
       }
 

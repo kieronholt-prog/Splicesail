@@ -172,6 +172,36 @@ test("buildUpwindBetweenTackPointKinds colours port and starboard segments", () 
   assert.ok(fc.features.some((f) => f.properties?.kind === "upwind_stbd"));
 });
 
+test("buildUpwindBetweenTackPointKinds colours all upwind legs when mark tacks are excluded", () => {
+  const wind = 10;
+  const twa = 42;
+  const portCog = (wind + twa + 360) % 360;
+  const stbdCog = (wind - twa + 360) % 360;
+  const lap1 = makeUpwindTrack(wind, portCog, stbdCog, 1_700_000_000);
+  const lap2 = makeUpwindTrack(wind, portCog, stbdCog, 1_700_000_400);
+  const offset = lap1.points.length;
+  const points = [...lap1.points, ...lap2.points.slice(1)];
+  const tacks = [
+    ...lap1.tacks,
+    ...lap2.tacks.map((t) => ({
+      ...t,
+      turnIdx: (t.turnIdx ?? 0) + offset - 1,
+      excludeFromStatsAndVMG: t.turnIdx === 29 || t.turnIdx === 14,
+    })),
+  ];
+  const legs = [
+    { type: "upwind", startIdx: 0, endIdx: offset - 1 },
+    { type: "reach", startIdx: offset - 1, endIdx: offset },
+    { type: "upwind", startIdx: offset, endIdx: points.length - 1 },
+  ];
+  const kinds = buildUpwindBetweenTackPointKinds(points, tacks, legs, wind);
+  const lap2Kinds = kinds.slice(offset);
+  assert.ok(
+    lap2Kinds.filter((k) => k === "upwind_port" || k === "upwind_stbd").length > 10,
+    "second upwind leg should be coloured",
+  );
+});
+
 test("buildFleetWindGrid merges two boats in same cell", () => {
   const wind = 10;
   const snap1 = makeUpwindTrack(wind, 52, 328, 1_700_000_000);

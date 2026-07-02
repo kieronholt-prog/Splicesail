@@ -83,17 +83,24 @@ export function SetupCourseMapSection({
   );
 
   const previewWind = userWind ?? preview?.windDir ?? 0;
+  const previewPoints = (preview?.points ?? trackPoints) as {
+    lat: number;
+    lon: number;
+    time?: number | null;
+    cog?: number;
+    dir?: number;
+  }[];
   const upwindTackTrackFC = useMemo(
     () =>
       preview
         ? buildUpwindBetweenTackTrackSegmentFC(
-            trackPoints,
+            previewPoints,
             preview.tacks ?? [],
             preview.legs ?? [],
             previewWind,
           )
         : { type: "FeatureCollection" as const, features: [] },
-    [preview, previewWind, trackPoints],
+    [preview, previewWind, previewPoints],
   );
 
   const onMarkDrag = useCallback(

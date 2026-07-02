@@ -1,7 +1,7 @@
 import { courseDirFromPoint, isUpwindHemisphere } from "./geo-heading";
 import {
-  extractRacingTackManoeuvres,
-  resolveSegmentTackSide,
+  iterUpwindLegTackSegments,
+  resolveUpwindSegmentTackSide,
   type AnalysisLeg,
   type AnalysisPoint,
   type AnalysisTack,
@@ -14,34 +14,31 @@ const UPWIND_STBD_COLOR = "#4aff8a";
 
 export { UPWIND_PORT_COLOR, UPWIND_STBD_COLOR };
 
-/** Per GPS index: upwind tack side between racing tacks, else null. */
+/** Per GPS index: upwind tack side on upwind legs, else null. */
 export function buildUpwindBetweenTackPointKinds(
   points: AnalysisPoint[],
   tacks: AnalysisTack[],
   legs: AnalysisLeg[],
   windFromDeg: number,
 ): (UpwindTackPointKind | null)[] {
-  void legs;
   const n = points.length;
   const out = new Array<UpwindTackPointKind | null>(n).fill(null);
   if (n < 3 || !Number.isFinite(windFromDeg)) return out;
 
-  const tackManoeuvres = extractRacingTackManoeuvres(tacks, points.length);
-  if (tackManoeuvres.length < 2) return out;
+  const segments = iterUpwindLegTackSegments(points, tacks, legs, { includeExcludedTacks: true });
+  if (segments.length === 0) return out;
 
-  for (let t = 0; t < tackManoeuvres.length - 1; t++) {
-    const exitTack = tackManoeuvres[t]!;
-    const entryTack = tackManoeuvres[t + 1]!;
-    const from = exitTack.idx;
-    const to = entryTack.idx;
-    if (to - from < 4) continue;
+  for (const { from, to, exitTack, entryTack } of segments) {
+    const lo = Math.max(0, from + 1);
+    const hi = Math.min(n - 1, to - 1);
+    if (hi - lo < 2) continue;
 
-    const midIdx = Math.min(points.length - 1, Math.floor((from + to) / 2));
+    const midIdx = Math.floor((lo + hi) / 2);
     const midCog = courseDirFromPoint(points[midIdx] ?? {});
-    const segmentSide = resolveSegmentTackSide(exitTack, entryTack, midCog, windFromDeg, true);
+    const segmentSide = resolveUpwindSegmentTackSide(exitTack, entryTack, midCog, windFromDeg);
     const kind: UpwindTackPointKind = segmentSide === "P" ? "upwind_port" : "upwind_stbd";
 
-    for (let i = from + 1; i < to; i++) {
+    for (let i = lo; i <= hi; i++) {
       const p = points[i];
       if (!p) continue;
       const cog = courseDirFromPoint(p);

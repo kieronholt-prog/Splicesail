@@ -5,7 +5,7 @@ import { attachCourseDir, courseDirFromPoint, isUpwindHemisphere } from "./geo-h
 import { classifyManoeuvreByWindCrossing } from "./manoeuvre-wind-crossing";
 import { buildUpwindBetweenTackPointKinds } from "./upwind-tack-track-segments";
 import { expandEntriesForLaps } from "./course-mark-entries";
-import { expandResolvedCourseMarks as expandResolvedCourseMarksForEngine } from "./course-wind-baseline";
+import { expandResolvedCourseMarks as expandResolvedCourseMarksForEngine, preferWindHemisphereFromCourse, acuteBearingDiffDeg } from "./course-wind-baseline";
 const DETECTION_DEFAULTS={
   tack:{minTurn:60,maxTurn:170,minSpeed:1.5,cooldownSec:4,beforePts:4,afterPts:5},
   gybe:{minTurn:45,maxTurn:230,minSpeed:1.8,cooldownSec:7,beforePts:6,afterPts:8},
@@ -1923,7 +1923,12 @@ function deriveWindAndClassify(manoeuvres,stableSegments,userWind,pts=null,windT
     return acc;
   });
   let windDir=(userWind!=null?Number(userWind)%360:(crossCounts[0]>=crossCounts[1]?cand1:cand2));
+  if(userWind==null&&Math.abs(crossCounts[0]-crossCounts[1])<=1&&windTuning?.baselineWindFromDeg!=null){
+    const b=Number(windTuning.baselineWindFromDeg)%360;
+    windDir=acuteBearingDiffDeg(cand1,b)<=acuteBearingDiffDeg(cand2,b)?cand1:cand2;
+  }
   if(userWind==null)windDir=refineWindFromUpwindTwaAndMark(stableSegments,pts,windTuning,windDir);
+  if(userWind==null)windDir=preferWindHemisphereFromCourse(windDir,windTuning?.baselineWindFromDeg);
   sideMeans=classifySides(pool,windDir);
   if(sideMeans.meanStarboardCOG!=null)meanStarboardCOG=sideMeans.meanStarboardCOG;
   if(sideMeans.meanPortCOG!=null)meanPortCOG=sideMeans.meanPortCOG;
